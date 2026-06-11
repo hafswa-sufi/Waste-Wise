@@ -1,5 +1,5 @@
 import React from 'react'
-import { Leaf, Twitter, Facebook, Instagram } from 'lucide-react'
+import { Leaf,  X, Share2, Mail, Globe }  from 'lucide-react'
 export function Footer() {
   const scrollTo = (id: string) => {
     const element = document.getElementById(id)
@@ -29,19 +29,19 @@ export function Footer() {
                 href="#"
                 className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center hover:bg-wastewise-green hover:text-white transition-colors"
               >
-                <Twitter className="w-5 h-5" />
+                <X className="w-5 h-5" />
               </a>
               <a
                 href="#"
                 className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center hover:bg-wastewise-green hover:text-white transition-colors"
               >
-                <Facebook className="w-5 h-5" />
+                <Mail className="w-5 h-5" />
               </a>
               <a
                 href="#"
                 className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center hover:bg-wastewise-green hover:text-white transition-colors"
               >
-                <Instagram className="w-5 h-5" />
+                <Globe className="w-5 h-5" />
               </a>
             </div>
           </div>
