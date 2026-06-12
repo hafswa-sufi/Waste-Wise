@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { useLocation, Link } from 'react-router-dom'
 import { Leaf } from 'lucide-react'
 import gsap from 'gsap'
+import { signInWithGoogle } from '../../src/service/authService'
 import { useScreenInit } from '../../useScreenInit'
 import { RoleSelect } from '../auth/RoleSelect'
 import { HouseholdSignup } from '../auth/HouseholdSignup'
@@ -31,6 +32,12 @@ export function Auth() {
     return 'NGO'
   })
   const containerRef = useRef<HTMLDivElement>(null)
+
+  const handlePartnerGoogleSignup = async () => {
+    await signInWithGoogle(orgType === 'NGO' ? 'NGO' : 'RecyclingFirm')
+    transitionTo('org-pending')
+  }
+
   // GSAP transition helper
   const transitionTo = (newState: AuthState, newOrgType?: OrgType) => {
     if (newState === authState) return
@@ -85,6 +92,7 @@ export function Auth() {
             orgType={orgType}
             onNext={() => transitionTo('org-signup-step2')}
             onLoginClick={() => transitionTo('login')}
+            onGoogleSignup={handlePartnerGoogleSignup}
           />
         )
       case 'org-signup-step2':

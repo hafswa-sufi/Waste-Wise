@@ -1,13 +1,53 @@
-import React from 'react'
+import { useState } from 'react'
+import { signInWithGoogle, signUp } from '../../src/service/authService'
 import { useNavigate } from 'react-router-dom'
+
 interface HouseholdSignupProps {
   onLoginClick: () => void
 }
+
 export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
   const navigate = useNavigate()
-  const handleSubmit = (e: React.FormEvent) => {
+  const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    navigate('/household')
+    setError(null)
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      await signUp(fullName, email, password, 'Household')
+      navigate('/household')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create account')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleGoogleSignup = async () => {
+    setError(null)
+    setIsLoading(true)
+    try {
+      await signInWithGoogle('Household')
+      navigate('/household')
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Google sign up failed. Try again.',
+      )
+    } finally {
+      setIsLoading(false)
+    }
   }
   return (
     <div className="w-full max-w-md mx-auto px-4 py-12">
@@ -27,6 +67,8 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
             <input
               type="text"
               required
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
               className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
               placeholder="e.g. Jane Doe"
             />
@@ -39,6 +81,8 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
             <input
               type="email"
               required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
               placeholder="jane@example.com"
             />
@@ -52,6 +96,8 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
               <input
                 type="password"
                 required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
                 placeholder="••••••••"
               />
@@ -63,6 +109,8 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
               <input
                 type="password"
                 required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
                 placeholder="••••••••"
               />
@@ -109,11 +157,27 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
             </div>
           </div>
 
+          {error && (
+            <p className="text-sm text-red-600 font-medium" role="alert">
+              {error}
+            </p>
+          )}
+
+          <button
+            type="button"
+            onClick={handleGoogleSignup}
+            disabled={isLoading}
+            className="w-full py-3.5 bg-white border border-gray-300 text-gray-800 rounded-xl font-bold text-lg hover:bg-gray-50 transition-colors shadow-sm"
+          >
+            Create Account with Google
+          </button>
+
           <button
             type="submit"
+            disabled={isLoading}
             className="w-full py-3.5 bg-wastewise-green text-white rounded-xl font-bold text-lg hover:bg-green-800 transition-colors shadow-sm mt-2"
           >
-            Create Account
+            {isLoading ? 'Please wait...' : 'Create Account'}
           </button>
         </form>
       </div>

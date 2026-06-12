@@ -1,18 +1,38 @@
-import React from 'react'
+import { useState } from 'react'
 interface OrgSignupStep1Props {
   orgType: 'NGO' | 'Recycling Company'
   onNext: () => void
   onLoginClick: () => void
+  onGoogleSignup: () => Promise<void>
 }
 export function OrgSignupStep1({
   orgType,
   onNext,
   onLoginClick,
+  onGoogleSignup,
 }: OrgSignupStep1Props) {
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     onNext()
   }
+
+  const handleGoogleSignup = async () => {
+    setError(null)
+    setIsLoading(true)
+    try {
+      await onGoogleSignup()
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Google sign up failed. Try again.',
+      )
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <div className="w-full max-w-2xl mx-auto px-4 py-12">
       <div className="text-center mb-8">
@@ -130,7 +150,21 @@ export function OrgSignupStep1({
             </div>
           </div>
 
+          {error && (
+            <p className="text-sm text-red-600 font-medium" role="alert">
+              {error}
+            </p>
+          )}
+
           <div className="pt-4 flex justify-end">
+            <button
+              type="button"
+              onClick={handleGoogleSignup}
+              disabled={isLoading}
+              className="mr-3 px-6 py-3.5 bg-white border border-gray-300 text-gray-700 rounded-xl font-bold text-lg hover:bg-gray-50 transition-colors"
+            >
+              Continue with Google
+            </button>
             <button
               type="submit"
               className="px-8 py-3.5 bg-wastewise-green text-white rounded-xl font-bold text-lg hover:bg-green-800 transition-colors shadow-sm"
