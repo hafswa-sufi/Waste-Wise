@@ -1,4 +1,3 @@
-import React from 'react'
 export function Hero() {
   const scrollTo = (id: string) => {
     const element = document.getElementById(id)

@@ -1,5 +1,4 @@
-import React from 'react'
-import { Leaf,  X, Share2, Mail, Globe }  from 'lucide-react'
+import { Leaf, X, Mail, Globe } from 'lucide-react'
 export function Footer() {
   const scrollTo = (id: string) => {
     const element = document.getElementById(id)

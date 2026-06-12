@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import { useEffect } from 'react'
 import { MapContainer, TileLayer, Marker, Tooltip, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import {
@@ -8,7 +8,7 @@ import {
   CalendarCheck,
   Filter,
 } from 'lucide-react'
-import { DisposalRequest } from './mockRecyclingData'
+import type { DisposalRequest } from './mockRecyclingData'
 interface RecyclingMapViewProps {
   requests: DisposalRequest[]
   onSelectRequest: (id: string) => void

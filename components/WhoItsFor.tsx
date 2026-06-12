@@ -1,4 +1,3 @@
-import React from 'react'
 import { Home, HandHeart, Recycle } from 'lucide-react'
 const audiences = [
   {

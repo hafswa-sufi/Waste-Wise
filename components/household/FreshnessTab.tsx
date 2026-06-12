@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react'
-import { Leaf, Calendar } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Calendar } from 'lucide-react'
 import gsap from 'gsap'
 const produceOptions = [
   {

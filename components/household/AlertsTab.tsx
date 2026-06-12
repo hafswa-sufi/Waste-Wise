@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react'
-import { mockAlertItems, AlertItem } from './mockHouseholdData'
+import { useEffect, useRef } from 'react'
+import { mockAlertItems } from './mockHouseholdData'
+import type { AlertItem } from './mockHouseholdData'
 import { MapPin } from 'lucide-react'
 import gsap from 'gsap'
 export function AlertsTab() {

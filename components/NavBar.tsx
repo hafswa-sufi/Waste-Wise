@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Leaf } from 'lucide-react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false)
   const location = useLocation()
@@ -64,20 +64,6 @@ export function Navbar() {
           >
             Who It's For
           </button>
-          <div className="flex items-center gap-4">
-            <Link
-              to="/household"
-              className={`font-medium transition-colors ${isScrolled || !isLanding ? 'text-wastewise-green hover:text-green-700' : 'text-green-300 hover:text-white'}`}
-            >
-              Household View
-            </Link>
-            <Link
-              to="/dashboard"
-              className={`font-medium transition-colors ${isScrolled || !isLanding ? 'text-wastewise-orange hover:text-orange-700' : 'text-orange-300 hover:text-white'}`}
-            >
-              NGO View
-            </Link>
-          </div>
           <button
             onClick={() => {
               if (!isLanding) {

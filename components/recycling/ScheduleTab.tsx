@@ -1,4 +1,3 @@
-import React from 'react'
 import { Scale } from 'lucide-react'
 import { mockSchedule } from './mockRecyclingData'
 export function ScheduleTab() {

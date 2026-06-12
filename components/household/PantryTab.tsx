@@ -1,14 +1,14 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import {
   Search,
   Plus,
   Pencil,
   Check,
   Flag,
-  MoreVertical,
   ChevronDown,
 } from 'lucide-react'
-import { mockPantryItems, PantryItem } from './mockHouseholdData'
+import { mockPantryItems } from './mockHouseholdData'
+import type { PantryItem } from './mockHouseholdData'
 export function PantryTab() {
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null)
   const getStatusColor = (status: PantryItem['status']) => {

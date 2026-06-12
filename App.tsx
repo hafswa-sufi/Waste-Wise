@@ -1,10 +1,10 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { Landing } from './pages/Landing'
-import { Dashboard } from './pages/Dashboard'
-import { Household } from './pages/Household'
-import { Auth } from './pages/Auth'
-import { Recycling } from './pages/Recycling'
+import { Landing } from './components/pages/Landing'
+import { Dashboard } from './components/pages/Dashboard'
+import { Household } from './components/pages/Household'
+import { Auth } from './components/pages/Auth'
+import { Recycling } from './components/pages/Recycling'
 export function App() {
   return (
     <BrowserRouter>

@@ -1,5 +1,5 @@
-import React from 'react'
-import { mockDisposalItems, ActionItem } from './mockHouseholdData'
+import { mockDisposalItems } from './mockHouseholdData'
+import type { ActionItem } from './mockHouseholdData'
 import { Calendar, Recycle } from 'lucide-react'
 export function DisposeTab() {
   const counts = {

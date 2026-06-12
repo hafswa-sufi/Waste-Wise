@@ -1,6 +1,6 @@
-import React from 'react'
 import { ChevronDown, Eye, Check, MapPin } from 'lucide-react'
-import { mockCollectionJobs, JobStatus } from './mockRecyclingData'
+import { mockCollectionJobs } from './mockRecyclingData'
+import type { JobStatus } from './mockRecyclingData'
 const statusStyles: Record<JobStatus, string> = {
   Confirmed: 'bg-blue-100 text-blue-700',
   'En Route': 'bg-orange-100 text-wastewise-orange',

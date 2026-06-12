@@ -1,5 +1,5 @@
-import React from 'react'
-import { mockDonationItems, ActionItem } from './mockHouseholdData'
+import { mockDonationItems } from './mockHouseholdData'
+import type { ActionItem } from './mockHouseholdData'
 import { Calendar, HandHeart } from 'lucide-react'
 export function DonateTab() {
   const counts = {

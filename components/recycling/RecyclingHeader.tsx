@@ -1,4 +1,3 @@
-import React from 'react'
 import { Leaf, Bell, User } from 'lucide-react'
 import { Link } from 'react-router-dom'
 export type RecyclingTab = 'map' | 'collections' | 'schedule' | 'reports'

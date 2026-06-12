@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+// @ts-expect-error Canvas manifest is a generated JS artifact without bundled typings.
 import { manifest } from './canvas.manifest.js'
 
 export function useScreenInit() {
