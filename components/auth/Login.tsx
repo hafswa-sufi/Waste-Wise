@@ -1,6 +1,8 @@
-import { useState } from 'react'
-import { login, signInWithGoogle } from '../../src/service/authService'
+import { useState, type FormEvent } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { login, signInWithGoogle } from '../../src/service/authService'
+import { authErrorMessage } from './authErrors'
 
 interface LoginProps {
   onSignupClick: () => void
@@ -13,6 +15,7 @@ export function Login({ onSignupClick }: LoginProps) {
   const [accountType, setAccountType] = useState<
     'household' | 'ngo' | 'recycling'
   >('household')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -44,17 +47,27 @@ export function Login({ onSignupClick }: LoginProps) {
     })
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
+
+    if (!email.trim()) {
+      setError('Email address is required.')
+      return
+    }
+    if (!password) {
+      setError('Password is required.')
+      return
+    }
+
     setIsLoading(true)
 
     try {
       const { userData } = await login(email, password)
       navigateByRole(userData.role)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Login failed'
-      if (message === 'PENDING_APPROVAL') {
+      const message = authErrorMessage(err, 'Login failed. Try again.')
+      if (message === 'Your account is still pending approval.') {
         handlePending()
         return
       }
@@ -72,8 +85,8 @@ export function Login({ onSignupClick }: LoginProps) {
       const { userData } = await signInWithGoogle(selectedRole)
       navigateByRole(userData.role)
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Google sign-in failed'
-      if (message === 'PENDING_APPROVAL') {
+      const message = authErrorMessage(err, 'Google sign-in failed. Try again.')
+      if (message === 'Your account is still pending approval.') {
         handlePending()
         return
       }
@@ -93,7 +106,7 @@ export function Login({ onSignupClick }: LoginProps) {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6" noValidate>
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1.5">
               Account Type
@@ -139,14 +152,28 @@ export function Login({ onSignupClick }: LoginProps) {
                 Forgot Password?
               </button>
             </div>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
-              placeholder="••••••••"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 pr-12 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
+                placeholder="Password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((value) => !value)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? (
+                  <EyeOff className="w-5 h-5" />
+                ) : (
+                  <Eye className="w-5 h-5" />
+                )}
+              </button>
+            </div>
           </div>
 
           {error && (
@@ -159,7 +186,7 @@ export function Login({ onSignupClick }: LoginProps) {
             type="button"
             onClick={handleGoogleLogin}
             disabled={isLoading}
-            className="w-full py-3.5 bg-white border border-gray-300 text-gray-800 rounded-xl font-bold text-lg hover:bg-gray-50 transition-colors shadow-sm"
+            className="w-full py-3.5 bg-white border border-gray-300 text-gray-800 rounded-xl font-bold text-lg hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-60"
           >
             Continue with Google
           </button>
@@ -167,7 +194,7 @@ export function Login({ onSignupClick }: LoginProps) {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-3.5 bg-wastewise-green text-white rounded-xl font-bold text-lg hover:bg-green-800 transition-colors shadow-sm mt-2"
+            className="w-full py-3.5 bg-wastewise-green text-white rounded-xl font-bold text-lg hover:bg-green-800 transition-colors shadow-sm mt-2 disabled:opacity-60"
           >
             {isLoading ? 'Please wait...' : 'Log In'}
           </button>

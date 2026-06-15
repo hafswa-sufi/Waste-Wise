@@ -1,6 +1,8 @@
-import { useState } from 'react'
-import { signInWithGoogle, signUp } from '../../src/service/authService'
+import { useState, type FormEvent } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { signInWithGoogle, signUp } from '../../src/service/authService'
+import { authErrorMessage } from './authErrors'
 
 interface HouseholdSignupProps {
   onLoginClick: () => void
@@ -12,15 +14,28 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const validate = () => {
+    if (!fullName.trim()) return 'Full name is required.'
+    if (!email.trim()) return 'Email address is required.'
+    if (!password) return 'Password is required.'
+    if (password.length < 6) return 'Password should be at least 6 characters.'
+    if (!confirmPassword) return 'Please confirm your password.'
+    if (password !== confirmPassword) return 'Passwords do not match.'
+    return null
+  }
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
 
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.')
+    const validationError = validate()
+    if (validationError) {
+      setError(validationError)
       return
     }
 
@@ -29,7 +44,7 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
       await signUp(fullName, email, password, 'Household')
       navigate('/household')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create account')
+      setError(authErrorMessage(err, 'Failed to create account. Try again.'))
     } finally {
       setIsLoading(false)
     }
@@ -42,13 +57,12 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
       await signInWithGoogle('Household')
       navigate('/household')
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Google sign up failed. Try again.',
-      )
+      setError(authErrorMessage(err, 'Google sign up failed. Try again.'))
     } finally {
       setIsLoading(false)
     }
   }
+
   return (
     <div className="w-full max-w-md mx-auto px-4 py-12">
       <div className="text-center mb-8">
@@ -59,14 +73,13 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-5" noValidate>
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1.5">
               Full Name
             </label>
             <input
               type="text"
-              required
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
@@ -80,7 +93,6 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
             </label>
             <input
               type="email"
-              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
@@ -88,31 +100,27 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-1.5">
                 Password
               </label>
-              <input
-                type="password"
-                required
+              <PasswordField
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
-                placeholder="••••••••"
+                show={showPassword}
+                onChange={setPassword}
+                onToggle={() => setShowPassword((value) => !value)}
               />
             </div>
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-1.5">
                 Confirm
               </label>
-              <input
-                type="password"
-                required
+              <PasswordField
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
-                placeholder="••••••••"
+                show={showConfirmPassword}
+                onChange={setConfirmPassword}
+                onToggle={() => setShowConfirmPassword((value) => !value)}
               />
             </div>
           </div>
@@ -121,10 +129,7 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
             <label className="block text-sm font-bold text-gray-700 mb-1.5">
               County / Location
             </label>
-            <select
-              required
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all appearance-none"
-            >
+            <select className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all appearance-none">
               <option value="">Select your county</option>
               <option value="Nairobi">Nairobi</option>
               <option value="Mombasa">Mombasa</option>
@@ -149,7 +154,6 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
                     name="storage"
                     value={opt}
                     className="sr-only"
-                    required
                   />
                   {opt}
                 </label>
@@ -167,7 +171,7 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
             type="button"
             onClick={handleGoogleSignup}
             disabled={isLoading}
-            className="w-full py-3.5 bg-white border border-gray-300 text-gray-800 rounded-xl font-bold text-lg hover:bg-gray-50 transition-colors shadow-sm"
+            className="w-full py-3.5 bg-white border border-gray-300 text-gray-800 rounded-xl font-bold text-lg hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-60"
           >
             Create Account with Google
           </button>
@@ -175,7 +179,7 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-3.5 bg-wastewise-green text-white rounded-xl font-bold text-lg hover:bg-green-800 transition-colors shadow-sm mt-2"
+            className="w-full py-3.5 bg-wastewise-green text-white rounded-xl font-bold text-lg hover:bg-green-800 transition-colors shadow-sm mt-2 disabled:opacity-60"
           >
             {isLoading ? 'Please wait...' : 'Create Account'}
           </button>
@@ -193,6 +197,38 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
           </button>
         </p>
       </div>
+    </div>
+  )
+}
+
+function PasswordField({
+  value,
+  show,
+  onChange,
+  onToggle,
+}: {
+  value: string
+  show: boolean
+  onChange: (value: string) => void
+  onToggle: () => void
+}) {
+  return (
+    <div className="relative">
+      <input
+        type={show ? 'text' : 'password'}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-4 py-2.5 pr-11 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
+        placeholder="Password"
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+        aria-label={show ? 'Hide password' : 'Show password'}
+      >
+        {show ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+      </button>
     </div>
   )
 }

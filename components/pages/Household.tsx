@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { HouseholdNavbar } from '../household/HouseholdNavBar'
 import type { TabType } from '../household/HouseholdNavBar'
 import { PantryTab } from '../household/PantryTab'
@@ -10,8 +11,10 @@ import { useScreenInit } from '../../useScreenInit'
 import gsap from 'gsap'
 export function Household() {
   const screenInit = useScreenInit()
+  const [searchParams] = useSearchParams()
+  const initialTab = searchParams.get('tab') as TabType | null
   const [activeTab, setActiveTab] = useState<TabType>(
-    (screenInit?.activeTab as TabType | undefined) ?? 'pantry',
+    initialTab ?? (screenInit?.activeTab as TabType | undefined) ?? 'pantry',
   )
   const contentRef = useRef<HTMLDivElement>(null)
   const handleTabChange = (tab: TabType) => {

@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react'
-import { mockAlertItems } from './mockHouseholdData'
-import type { AlertItem } from './mockHouseholdData'
+import { useHouseholdBackend, type AlertItem } from './householdBackend'
 import { MapPin } from 'lucide-react'
 import gsap from 'gsap'
 export function AlertsTab() {
   const containerRef = useRef<HTMLDivElement>(null)
+  const { alerts, loading, error, markConsumed, flagAction } =
+    useHouseholdBackend()
+
   useEffect(() => {
     if (containerRef.current) {
       const cards = containerRef.current.querySelectorAll('.alert-card')
@@ -23,7 +25,7 @@ export function AlertsTab() {
         },
       )
     }
-  }, [])
+  }, [alerts])
   const getBorderColor = (status: AlertItem['status']) => {
     switch (status) {
       case 'expired':
@@ -49,10 +51,9 @@ export function AlertsTab() {
     }
   }
   const counts = {
-    expired: mockAlertItems.filter((i) => i.status === 'expired').length,
-    expiringSoon: mockAlertItems.filter((i) => i.status === 'expiring-soon')
-      .length,
-    thisWeek: mockAlertItems.filter((i) => i.status === 'this-week').length,
+    expired: alerts.filter((i) => i.status === 'expired').length,
+    expiringSoon: alerts.filter((i) => i.status === 'expiring-soon').length,
+    thisWeek: alerts.filter((i) => i.status === 'this-week').length,
   }
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -82,7 +83,7 @@ export function AlertsTab() {
         ref={containerRef}
         className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
       >
-        {mockAlertItems.map((item) => (
+        {alerts.map((item) => (
           <div
             key={item.id}
             className={`alert-card bg-white rounded-xl shadow-sm border border-gray-200 border-l-[6px] p-6 flex flex-col hover:-translate-y-1 hover:shadow-md transition-all duration-300 ${getBorderColor(item.status)}`}
@@ -107,19 +108,57 @@ export function AlertsTab() {
             </div>
 
             <div className="mt-auto grid grid-cols-3 gap-2">
-              <button className="py-2 px-1 text-xs font-bold text-green-700 border border-green-600 rounded-lg hover:bg-green-50 transition-colors text-center">
+              <button
+                onClick={() =>
+                  markConsumed({
+                    id: item.pantryItemId,
+                    name: item.name,
+                    quantity: '1 item',
+                  })
+                }
+                className="py-2 px-1 text-xs font-bold text-green-700 border border-green-600 rounded-lg hover:bg-green-50 transition-colors text-center"
+              >
                 Consume
               </button>
-              <button className="py-2 px-1 text-xs font-bold text-white bg-wastewise-orange rounded-lg hover:bg-orange-600 transition-colors text-center">
+              <button
+                onClick={() =>
+                  flagAction({
+                    type: 'donation',
+                    pantryItemId: item.pantryItemId,
+                    name: item.name,
+                    quantity: '1 item',
+                  })
+                }
+                className="py-2 px-1 text-xs font-bold text-white bg-wastewise-orange rounded-lg hover:bg-orange-600 transition-colors text-center"
+              >
                 Donate
               </button>
-              <button className="py-2 px-1 text-xs font-bold text-red-600 border border-red-500 rounded-lg hover:bg-red-50 transition-colors text-center">
+              <button
+                onClick={() =>
+                  flagAction({
+                    type: 'disposal',
+                    pantryItemId: item.pantryItemId,
+                    name: item.name,
+                    quantity: '1 item',
+                  })
+                }
+                className="py-2 px-1 text-xs font-bold text-red-600 border border-red-500 rounded-lg hover:bg-red-50 transition-colors text-center"
+              >
                 Dispose
               </button>
             </div>
           </div>
         ))}
       </div>
+      {loading && (
+        <div className="py-10 text-center text-gray-500">Loading alerts...</div>
+      )}
+      {!loading && !error && alerts.length === 0 && (
+        <div className="py-10 text-center text-gray-500">
+          No expiry alerts right now.
+        </div>
+      )}
+      {error && <div className="py-10 text-center text-red-600">{error}</div>}
     </div>
   )
 }

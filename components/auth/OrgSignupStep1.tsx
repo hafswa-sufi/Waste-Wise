@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
+import { authErrorMessage } from './authErrors'
 interface OrgSignupStep1Props {
   orgType: 'NGO' | 'Recycling Company'
   onNext: () => void
@@ -13,9 +15,16 @@ export function OrgSignupStep1({
 }: OrgSignupStep1Props) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
+    const form = e.currentTarget as HTMLFormElement
+    if (!form.checkValidity()) {
+      setError('Please fill in all required registration details.')
+      return
+    }
     onNext()
   }
 
@@ -25,9 +34,7 @@ export function OrgSignupStep1({
     try {
       await onGoogleSignup()
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Google sign up failed. Try again.',
-      )
+      setError(authErrorMessage(err, 'Google sign up failed. Try again.'))
     } finally {
       setIsLoading(false)
     }
@@ -43,7 +50,7 @@ export function OrgSignupStep1({
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6" noValidate>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-1.5">
@@ -140,12 +147,26 @@ export function OrgSignupStep1({
                 <label className="block text-sm font-bold text-gray-700 mb-1.5">
                   Password
                 </label>
-                <input
-                  type="password"
-                  required
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
-                  placeholder="••••••••"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    className="w-full px-4 py-2.5 pr-11 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
+                    placeholder="Password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((value) => !value)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

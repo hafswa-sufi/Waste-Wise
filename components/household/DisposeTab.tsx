@@ -1,11 +1,18 @@
-import { mockDisposalItems } from './mockHouseholdData'
-import type { ActionItem } from './mockHouseholdData'
+import {
+  displayDate,
+  useHouseholdBackend,
+  type ActionItem,
+  type ActionStatus,
+} from './householdBackend'
 import { Calendar, Recycle } from 'lucide-react'
 export function DisposeTab() {
+  const { disposalItems, loading, error, updateActionStatus } =
+    useHouseholdBackend()
+
   const counts = {
-    pending: mockDisposalItems.filter((i) => i.status === 'Pending').length,
-    confirmed: mockDisposalItems.filter((i) => i.status === 'Confirmed').length,
-    collected: mockDisposalItems.filter((i) => i.status === 'Collected').length,
+    pending: disposalItems.filter((i) => i.status === 'Pending').length,
+    confirmed: disposalItems.filter((i) => i.status === 'Confirmed').length,
+    collected: disposalItems.filter((i) => i.status === 'Collected').length,
   }
   const getStatusColor = (status: ActionItem['status']) => {
     switch (status) {
@@ -58,7 +65,7 @@ export function DisposeTab() {
       </div>
 
       <div className="space-y-4">
-        {mockDisposalItems.map((item) => (
+        {disposalItems.map((item) => (
           <div
             key={item.id}
             className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
@@ -75,18 +82,46 @@ export function DisposeTab() {
 
             <div className="flex-1 flex items-center gap-2 text-gray-600">
               <Calendar className="w-4 h-4" />
-              <span className="text-sm font-medium">{item.pickupDate}</span>
+              <span className="text-sm font-medium">
+                {displayDate(item.pickupDate)}
+              </span>
             </div>
 
-            <div className="shrink-0">
+            <div className="shrink-0 flex items-center gap-2">
               <span
                 className={`px-3 py-1.5 rounded-full text-xs font-bold ${getStatusColor(item.status)}`}
               >
                 {item.status}
               </span>
+              <select
+                value={item.status}
+                onChange={(event) =>
+                  updateActionStatus(
+                    item.id,
+                    event.target.value as ActionStatus,
+                  )
+                }
+                className="border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold text-gray-600 bg-white"
+                aria-label={`Update ${item.name} disposal status`}
+              >
+                <option>Pending</option>
+                <option>Confirmed</option>
+                <option>Collected</option>
+              </select>
             </div>
           </div>
         ))}
+        {loading && (
+          <div className="py-10 text-center text-gray-500">
+            Loading disposals...
+          </div>
+        )}
+        {!loading && !error && disposalItems.length === 0 && (
+          <div className="py-10 text-center text-gray-500">
+            No disposal requests yet.
+          </div>
+        )}
+        {error && <div className="py-10 text-center text-red-600">{error}</div>}
       </div>
     </div>
   )
