@@ -1,121 +1,69 @@
 import { useState, useRef } from 'react'
 import { Calendar } from 'lucide-react'
 import gsap from 'gsap'
+import { estimateFreshness } from '../../src/service/pantryService'
+
 const produceOptions = [
-  {
-    value: 'sukuma',
-    label: 'Sukuma Wiki',
-    icon: '🥬',
-  },
-  {
-    value: 'tomatoes',
-    label: 'Tomatoes',
-    icon: '🍅',
-  },
-  {
-    value: 'onions',
-    label: 'Onions',
-    icon: '🧅',
-  },
-  {
-    value: 'managu',
-    label: 'Managu',
-    icon: '🌿',
-  },
-  {
-    value: 'avocado',
-    label: 'Avocado',
-    icon: '🥑',
-  },
-  {
-    value: 'bananas',
-    label: 'Bananas',
-    icon: '🍌',
-  },
-  {
-    value: 'cabbage',
-    label: 'Cabbage',
-    icon: '🥬',
-  },
-  {
-    value: 'carrots',
-    label: 'Carrots',
-    icon: '🥕',
-  },
-  {
-    value: 'spinach',
-    label: 'Spinach (Mchicha)',
-    icon: '🍃',
-  },
+  { value: 'sukuma',   label: 'Sukuma Wiki',        icon: '🥬' },
+  { value: 'tomatoes', label: 'Tomatoes',            icon: '🍅' },
+  { value: 'onions',   label: 'Onions',              icon: '🧅' },
+  { value: 'managu',   label: 'Managu',              icon: '🌿' },
+  { value: 'avocado',  label: 'Avocado',             icon: '🥑' },
+  { value: 'bananas',  label: 'Bananas',             icon: '🍌' },
+  { value: 'cabbage',  label: 'Cabbage',             icon: '🥬' },
+  { value: 'carrots',  label: 'Carrots',             icon: '🥕' },
+  { value: 'spinach',  label: 'Spinach (Mchicha)',   icon: '🍃' },
 ]
+
 export function FreshnessTab() {
   const [produce, setProduce] = useState('sukuma')
   const [storage, setStorage] = useState('Counter')
-  const [date, setDate] = useState('2026-06-06') // 2 days ago mock
+  const [date, setDate] = useState('')
   const [showResult, setShowResult] = useState(false)
+  const [result, setResult] = useState<{
+    status: string
+    days: number
+    rec: string
+    color: string
+    bg: string
+    border: string
+  } | null>(null)
   const resultRef = useRef<HTMLDivElement>(null)
+
+  const today = new Date().toISOString().split('T')[0]
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (!date) return
+
+    const estimation = estimateFreshness(produce, storage, date)
+
+    const colorMap = {
+      Fresh:      { color: 'text-green-600',  bg: 'bg-green-50',  border: 'border-green-200'  },
+      'Mid-Fresh':{ color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200' },
+      Spoiled:    { color: 'text-red-600',    bg: 'bg-red-50',    border: 'border-red-200'    },
+    }
+
+    setResult({
+      status: estimation.classification,
+      days:   estimation.daysRemaining,
+      rec:    estimation.recommendation,
+      ...colorMap[estimation.classification],
+    })
+
     setShowResult(false)
-    // Small delay to allow re-triggering animation if already shown
     setTimeout(() => {
       setShowResult(true)
       if (resultRef.current) {
         gsap.fromTo(
           resultRef.current,
-          {
-            y: -20,
-            opacity: 0,
-          },
-          {
-            y: 0,
-            opacity: 1,
-            duration: 0.5,
-            ease: 'power3.out',
-          },
+          { y: -20, opacity: 0 },
+          { y: 0,   opacity: 1, duration: 0.5, ease: 'power3.out' },
         )
       }
     }, 50)
   }
-  // Simple deterministic mock logic
-  const getResult = () => {
-    if (storage === 'Fridge' && produce === 'sukuma')
-      return {
-        status: 'Fresh',
-        days: 4,
-        rec: 'Consume within 4 days',
-        color: 'text-green-600',
-        bg: 'bg-green-50',
-        border: 'border-green-200',
-      }
-    if (storage === 'Counter' && produce === 'sukuma')
-      return {
-        status: 'Mid-Fresh',
-        days: 1,
-        rec: 'Consume soon or freeze',
-        color: 'text-orange-600',
-        bg: 'bg-orange-50',
-        border: 'border-orange-200',
-      }
-    if (storage === 'Basket')
-      return {
-        status: 'Spoiled',
-        days: 0,
-        rec: 'Dispose responsibly',
-        color: 'text-red-600',
-        bg: 'bg-red-50',
-        border: 'border-red-200',
-      }
-    return {
-      status: 'Fresh',
-      days: 5,
-      rec: 'Store properly',
-      color: 'text-green-600',
-      bg: 'bg-green-50',
-      border: 'border-green-200',
-    }
-  }
-  const result = getResult()
+
   return (
     <div className="max-w-xl mx-auto px-4 sm:px-6 py-12">
       <div className="text-center mb-10">
@@ -146,11 +94,7 @@ export function FreshnessTab() {
                 ))}
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
-                <svg
-                  className="h-4 w-4 fill-current"
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 20 20"
-                >
+                <svg className="h-4 w-4 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
                   <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
                 </svg>
               </div>
@@ -167,7 +111,11 @@ export function FreshnessTab() {
                   key={method}
                   type="button"
                   onClick={() => setStorage(method)}
-                  className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-colors ${storage === method ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                  className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-colors ${
+                    storage === method
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
                 >
                   {method}
                 </button>
@@ -182,7 +130,9 @@ export function FreshnessTab() {
             <div className="relative">
               <Calendar className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
+                required
                 type="date"
+                max={today}
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green font-medium"
@@ -199,44 +149,41 @@ export function FreshnessTab() {
         </form>
       </div>
 
-      {/* Result Card */}
-      <div
-        ref={resultRef}
-        className={`rounded-2xl border p-6 text-center shadow-sm ${result.bg} ${result.border}`}
-        style={{
-          display: showResult ? 'block' : 'none',
-          opacity: 0,
-        }}
-      >
+      {/* Result Card — identical markup to original */}
+      {result && (
         <div
-          className={`inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-white/60 backdrop-blur-sm font-bold text-sm mb-4 ${result.color}`}
+          ref={resultRef}
+          className={`rounded-2xl border p-6 text-center shadow-sm ${result.bg} ${result.border}`}
+          style={{ display: showResult ? 'block' : 'none', opacity: 0 }}
         >
-          {result.status}
-        </div>
+          <div className={`inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-white/60 backdrop-blur-sm font-bold text-sm mb-4 ${result.color}`}>
+            {result.status}
+          </div>
 
-        <h2 className={`text-4xl font-extrabold mb-2 ${result.color}`}>
-          {result.days > 0 ? `${result.days} days remaining` : 'Spoiled'}
-        </h2>
+          <h2 className={`text-4xl font-extrabold mb-2 ${result.color}`}>
+            {result.days > 0 ? `${result.days} days remaining` : 'Spoiled'}
+          </h2>
 
-        <p className="text-gray-700 font-medium mb-6">{result.rec}</p>
+          <p className="text-gray-700 font-medium mb-6">{result.rec}</p>
 
-        <div className="flex justify-center gap-3">
-          {result.days > 0 ? (
-            <>
-              <button className="px-6 py-2.5 bg-white border border-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
-                Mark as Consumed
+          <div className="flex justify-center gap-3">
+            {result.days > 0 ? (
+              <>
+                <button className="px-6 py-2.5 bg-white border border-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
+                  Mark as Consumed
+                </button>
+                <button className="px-6 py-2.5 bg-wastewise-orange text-white font-bold rounded-lg hover:bg-orange-600 transition-colors shadow-sm">
+                  Donate
+                </button>
+              </>
+            ) : (
+              <button className="px-6 py-2.5 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors shadow-sm">
+                Flag for Disposal
               </button>
-              <button className="px-6 py-2.5 bg-wastewise-orange text-white font-bold rounded-lg hover:bg-orange-600 transition-colors shadow-sm">
-                Donate
-              </button>
-            </>
-          ) : (
-            <button className="px-6 py-2.5 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors shadow-sm">
-              Flag for Disposal
-            </button>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

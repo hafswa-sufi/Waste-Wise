@@ -134,7 +134,7 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
             </select>
           </div>
 
-          <div>
+          {/* <div>
             <label className="block text-sm font-bold text-gray-700 mb-2">
               Primary Storage Conditions
             </label>
@@ -155,7 +155,7 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
                 </label>
               ))}
             </div>
-          </div>
+          </div> */}
 
           {error && (
             <p className="text-sm text-red-600 font-medium" role="alert">
