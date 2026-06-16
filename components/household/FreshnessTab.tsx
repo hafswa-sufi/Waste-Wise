@@ -1,12 +1,12 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   Calendar,
   Check,
-  HandHeart,
-  Recycle,
+  Search,
   Sparkles,
   Thermometer,
 } from 'lucide-react'
+import gsap from 'gsap'
 import {
   displayDate,
   useHouseholdBackend,
@@ -56,13 +56,60 @@ const produceOptions: Array<{
     category: 'Vegetables',
     shelfLife: { Fridge: 5, Counter: 1, Basket: 1 },
   },
+  {
+    value: 'chicken',
+    label: 'Chicken',
+    category: 'Proteins',
+    shelfLife: { Fridge: 2, Counter: 1, Basket: 1 },
+  },
+  {
+    value: 'beef',
+    label: 'Beef',
+    category: 'Proteins',
+    shelfLife: { Fridge: 3, Counter: 1, Basket: 1 },
+  },
+  {
+    value: 'fish',
+    label: 'Fish',
+    category: 'Proteins',
+    shelfLife: { Fridge: 1, Counter: 1, Basket: 1 },
+  },
+  {
+    value: 'meat',
+    label: 'Meat',
+    category: 'Proteins',
+    shelfLife: { Fridge: 2, Counter: 1, Basket: 1 },
+  },
 ]
+
+const categoryOptions: Array<PantryCategory | 'All'> = [
+  'All',
+  'Vegetables',
+  'Fruits',
+  'Proteins',
+]
+
+const categoryShelfLife: Record<PantryCategory, Record<StorageType, number>> = {
+  Vegetables: { Fridge: 6, Counter: 2, Basket: 1 },
+  Fruits: { Fridge: 6, Counter: 4, Basket: 2 },
+  Grains: { Fridge: 30, Counter: 120, Basket: 90 },
+  Dairy: { Fridge: 4, Counter: 1, Basket: 1 },
+  Proteins: { Fridge: 3, Counter: 1, Basket: 1 },
+  Other: { Fridge: 14, Counter: 14, Basket: 7 },
+}
 
 function addDays(dateOnly: string, days: number) {
   const date = new Date(`${dateOnly}T00:00:00`)
   if (Number.isNaN(date.getTime())) return ''
   date.setDate(date.getDate() + days)
-  return date.toISOString().slice(0, 10)
+  return toDateInputValue(date)
+}
+
+function toDateInputValue(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function daysUntil(dateOnly: string) {
@@ -72,23 +119,94 @@ function daysUntil(dateOnly: string) {
   return Math.ceil((expiry.getTime() - today.getTime()) / 86_400_000)
 }
 
+const cookedFoodKeywords = [
+  'cooked',
+  'leftover',
+  'leftovers',
+  'stew',
+  'soup',
+  'meal',
+  'takeaway',
+  'fried',
+  'boiled',
+  'roasted',
+  'grilled',
+  'pilau',
+]
+const processedFoodKeywords = [
+  'flour',
+  'cereal',
+  'pasta',
+  'canned',
+  'tin',
+  'packet',
+  'noodles',
+  'biscuits',
+  'crackers',
+  'sauce',
+  'jam',
+]
+
+function includesAny(value: string, words: string[]) {
+  const normalized = value.toLowerCase()
+  return words.some((word) => normalized.includes(word))
+}
+
+function validateFreshnessInput(name: string) {
+  if (includesAny(name, cookedFoodKeywords)) {
+    return 'Cooked food is outside the current freshness estimator scope.'
+  }
+  if (includesAny(name, processedFoodKeywords)) {
+    return 'Processed goods should be added from the Pantry tab with a manual expiry date.'
+  }
+  return null
+}
+
 export function FreshnessTab() {
-  const { addPantryItem, flagAction } = useHouseholdBackend()
+  const { addPantryItem } = useHouseholdBackend()
   const [produce, setProduce] = useState(produceOptions[0].value)
+  const [produceSearch, setProduceSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState<
+    PantryCategory | 'All'
+  >('All')
+  const [customProduceName, setCustomProduceName] = useState('')
   const [storage, setStorage] = useState<StorageType>('Counter')
   const [quantity, setQuantity] = useState('1 item')
   const [purchaseDate, setPurchaseDate] = useState(
-    new Date().toISOString().slice(0, 10),
+    toDateInputValue(new Date()),
   )
   const [submitted, setSubmitted] = useState(true)
   const [notice, setNotice] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const resultRef = useRef<HTMLElement>(null)
 
-  const selectedProduce = useMemo(
+  const filteredProduceOptions = useMemo(
     () =>
-      produceOptions.find((option) => option.value === produce) ??
-      produceOptions[0],
-    [produce],
+      produceOptions.filter((option) => {
+        const matchesSearch = option.label
+          .toLowerCase()
+          .includes(produceSearch.toLowerCase())
+        const matchesCategory =
+          categoryFilter === 'All' || option.category === categoryFilter
+        return matchesSearch && matchesCategory
+      }),
+    [categoryFilter, produceSearch],
   )
+
+  const selectedKnownProduce =
+    produceOptions.find((option) => option.value === produce) ??
+    filteredProduceOptions[0] ??
+    produceOptions[0]
+  const customCategory =
+    categoryFilter === 'All' ? 'Vegetables' : categoryFilter
+  const selectedProduce = customProduceName.trim()
+    ? {
+        value: 'custom',
+        label: customProduceName.trim(),
+        category: customCategory,
+        shelfLife: categoryShelfLife[customCategory],
+      }
+    : selectedKnownProduce
   const estimatedDays = selectedProduce.shelfLife[storage]
   const expiryDate = addDays(purchaseDate, estimatedDays)
   const remainingDays = daysUntil(expiryDate)
@@ -114,10 +232,32 @@ export function FreshnessTab() {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const validationMessage = validateFreshnessInput(selectedProduce.label)
+    if (validationMessage) {
+      setErrorMessage(validationMessage)
+      setSubmitted(false)
+      return
+    }
+    setErrorMessage(null)
     setSubmitted(true)
   }
 
+  useEffect(() => {
+    if (!submitted || !resultRef.current) return
+    gsap.fromTo(
+      resultRef.current,
+      { opacity: 0, y: 14 },
+      { opacity: 1, y: 0, duration: 0.35, ease: 'power2.out' },
+    )
+  }, [submitted, selectedProduce.label, storage, purchaseDate])
+
   const handleSaveToPantry = async () => {
+    const validationMessage = validateFreshnessInput(selectedProduce.label)
+    if (validationMessage) {
+      setErrorMessage(validationMessage)
+      setSubmitted(false)
+      return
+    }
     await addPantryItem({
       name: selectedProduce.label,
       category: selectedProduce.category,
@@ -125,21 +265,13 @@ export function FreshnessTab() {
       storageType: storage,
       purchaseDate,
       expiryDate,
+      itemKind: 'fresh',
     })
     showNotice(`${selectedProduce.label} added to pantry.`)
-  }
-
-  const handleAction = async (type: 'donation' | 'disposal') => {
-    await flagAction({
-      type,
-      name: selectedProduce.label,
-      quantity,
-    })
-    showNotice(
-      type === 'donation'
-        ? 'Donation request created.'
-        : 'Disposal request created.',
-    )
+    setSubmitted(false)
+    setErrorMessage(null)
+    setCustomProduceName('')
+    setQuantity('1 item')
   }
 
   return (
@@ -166,19 +298,72 @@ export function FreshnessTab() {
         >
           <label className="block">
             <span className="text-sm font-bold text-gray-700">
+              Search produce
+            </span>
+            <div className="mt-2 flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-2 focus-within:border-wastewise-green focus-within:ring-2 focus-within:ring-wastewise-green/20">
+              <Search className="w-4 h-4 text-gray-400" />
+              <input
+                value={produceSearch}
+                onChange={(event) => setProduceSearch(event.target.value)}
+                className="w-full text-sm outline-none"
+                placeholder="Search sukuma, tomatoes, mangoes..."
+              />
+            </div>
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-bold text-gray-700">
+              Produce category
+            </span>
+            <select
+              value={categoryFilter}
+              onChange={(event) =>
+                setCategoryFilter(event.target.value as PantryCategory | 'All')
+              }
+              className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold focus:border-wastewise-green focus:outline-none focus:ring-2 focus:ring-wastewise-green/20"
+            >
+              {categoryOptions.map((category) => (
+                <option key={category}>{category}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-bold text-gray-700">
               Produce type
             </span>
             <select
-              value={produce}
-              onChange={(event) => setProduce(event.target.value)}
+              value={selectedKnownProduce.value}
+              onChange={(event) => {
+                setProduce(event.target.value)
+                setCustomProduceName('')
+              }}
               className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold focus:border-wastewise-green focus:outline-none focus:ring-2 focus:ring-wastewise-green/20"
             >
-              {produceOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+              {filteredProduceOptions.length > 0 ? (
+                filteredProduceOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))
+              ) : (
+                <option value={selectedKnownProduce.value}>
+                  No matching produce
                 </option>
-              ))}
+              )}
             </select>
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-bold text-gray-700">
+              Not listed?
+            </span>
+            <input
+              value={customProduceName}
+              onChange={(event) => setCustomProduceName(event.target.value)}
+              className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-wastewise-green focus:outline-none focus:ring-2 focus:ring-wastewise-green/20"
+              placeholder="Type produce name"
+            />
           </label>
 
           <label className="block">
@@ -232,9 +417,17 @@ export function FreshnessTab() {
           >
             Estimate freshness
           </button>
+          {errorMessage && (
+            <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+              {errorMessage}
+            </div>
+          )}
         </form>
 
-        <section className="bg-white border border-gray-200 rounded-xl p-5 sm:p-6">
+        <section
+          ref={resultRef}
+          className="bg-white border border-gray-200 rounded-xl p-5 sm:p-6"
+        >
           {submitted && (
             <>
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
@@ -267,7 +460,7 @@ export function FreshnessTab() {
                 </div>
                 <div className="rounded-lg bg-gray-50 px-4 py-4">
                   <p className="text-xs font-bold uppercase text-gray-400">
-                    Expiry estimate
+                    Estimated expiry date
                   </p>
                   <p className="mt-1 text-lg font-extrabold text-gray-900">
                     {displayDate(expiryDate)}
@@ -298,7 +491,7 @@ export function FreshnessTab() {
                       {status === 'Spoiled'
                         ? 'Move this to disposal so it can be handled responsibly.'
                         : status === 'Use Today'
-                          ? 'Use this today or donate it immediately if it is still edible.'
+                          ? 'Add this to pantry so alerts can help you use it in time.'
                           : 'Add this to the pantry so alerts can track it automatically.'}
                     </p>
                   </div>
@@ -319,22 +512,18 @@ export function FreshnessTab() {
                   <Check className="w-4 h-4" />
                   Add to pantry
                 </button>
-                <button
-                  onClick={() => handleAction('donation')}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-100 px-4 py-2.5 text-sm font-bold text-orange-700 hover:bg-orange-50"
-                >
-                  <HandHeart className="w-4 h-4" />
-                  Donate
-                </button>
-                <button
-                  onClick={() => handleAction('disposal')}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-100 px-4 py-2.5 text-sm font-bold text-red-700 hover:bg-red-50"
-                >
-                  <Recycle className="w-4 h-4" />
-                  Dispose
-                </button>
               </div>
             </>
+          )}
+          {!submitted && (
+            <div className="flex min-h-72 items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-center">
+              <div>
+                <Sparkles className="mx-auto h-8 w-8 text-gray-300" />
+                <p className="mt-3 text-sm font-semibold text-gray-500">
+                  Estimate a fresh produce item to see its result here.
+                </p>
+              </div>
+            </div>
           )}
         </section>
       </div>

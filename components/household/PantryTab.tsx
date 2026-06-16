@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   Search,
   Plus,
@@ -8,6 +8,7 @@ import {
   HandHeart,
   Recycle,
 } from 'lucide-react'
+import gsap from 'gsap'
 import {
   displayDate,
   type NewPantryItemInput,
@@ -24,7 +25,7 @@ const categoryOptions: PantryCategory[] = [
   'Dairy',
   'Fruits',
   'Proteins',
-  'Pantry',
+  'Other',
 ]
 
 const storageOptions: StorageType[] = ['Fridge', 'Counter', 'Basket']
@@ -34,64 +35,114 @@ const statusOptions: Array<PantryStatus | 'All'> = [
   'Expiring Soon',
   'Expired',
 ]
-const produceOptions: Array<{
-  value: string
-  label: string
-  category: PantryCategory
-  shelfLife: Record<StorageType, number>
-}> = [
-  {
-    value: 'sukuma',
-    label: 'Sukuma Wiki',
-    category: 'Vegetables',
-    shelfLife: { Fridge: 6, Counter: 2, Basket: 1 },
-  },
-  {
-    value: 'tomatoes',
-    label: 'Tomatoes',
-    category: 'Vegetables',
-    shelfLife: { Fridge: 7, Counter: 4, Basket: 3 },
-  },
-  {
-    value: 'mangoes',
-    label: 'Mangoes',
-    category: 'Fruits',
-    shelfLife: { Fridge: 6, Counter: 3, Basket: 2 },
-  },
-  {
-    value: 'bananas',
-    label: 'Bananas',
-    category: 'Fruits',
-    shelfLife: { Fridge: 5, Counter: 4, Basket: 3 },
-  },
-  {
-    value: 'cabbage',
-    label: 'Cabbage',
-    category: 'Vegetables',
-    shelfLife: { Fridge: 10, Counter: 3, Basket: 2 },
-  },
-  {
-    value: 'spinach',
-    label: 'Spinach',
-    category: 'Vegetables',
-    shelfLife: { Fridge: 5, Counter: 1, Basket: 1 },
-  },
+const categoryShelfLife: Record<PantryCategory, Record<StorageType, number>> = {
+  Vegetables: { Fridge: 6, Counter: 2, Basket: 1 },
+  Fruits: { Fridge: 6, Counter: 4, Basket: 2 },
+  Grains: { Fridge: 30, Counter: 120, Basket: 90 },
+  Dairy: { Fridge: 4, Counter: 1, Basket: 1 },
+  Proteins: { Fridge: 3, Counter: 1, Basket: 1 },
+  Other: { Fridge: 14, Counter: 14, Basket: 7 },
+}
+
+const cookedFoodKeywords = [
+  'cooked',
+  'leftover',
+  'leftovers',
+  'stew',
+  'soup',
+  'meal',
+  'takeaway',
+  'fried',
+  'boiled',
+  'roasted',
+  'grilled',
+  'pilau',
+]
+const freshFoodKeywords = [
+  'sukuma',
+  'kale',
+  'spinach',
+  'tomato',
+  'mango',
+  'banana',
+  'cabbage',
+  'lettuce',
+  'avocado',
+  'carrot',
+  'onion',
+  'chicken',
+  'beef',
+  'meat',
+  'fish',
+  'pork',
+  'lamb',
+]
+const processedFoodKeywords = [
+  'flour',
+  'cereal',
+  'pasta',
+  'canned',
+  'tin',
+  'packet',
+  'noodles',
+  'biscuits',
+  'crackers',
+  'sauce',
+  'jam',
 ]
 
 const emptyForm: NewPantryItemInput = {
   name: '',
-  category: 'Pantry',
+  category: 'Other',
   quantity: '',
   storageType: 'Counter',
-  purchaseDate: new Date().toISOString().slice(0, 10),
+  purchaseDate: toDateInputValue(new Date()),
   expiryDate: '',
+}
+
+function toDateInputValue(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function addDays(dateOnly: string, days: number) {
   const date = new Date(`${dateOnly}T00:00:00`)
   if (Number.isNaN(date.getTime())) return ''
   date.setDate(date.getDate() + days)
-  return date.toISOString().slice(0, 10)
+  return toDateInputValue(date)
+}
+
+function includesAny(value: string, words: string[]) {
+  const normalized = value.toLowerCase()
+  return words.some((word) => normalized.includes(word))
+}
+
+function validatePantryItem(input: NewPantryItemInput, kind: 'processed' | 'fresh') {
+  if (includesAny(input.name, cookedFoodKeywords)) {
+    return 'Cooked food is outside the current WasteWise pantry scope. Add raw fresh produce or packaged/processed goods only.'
+  }
+
+  if (kind === 'fresh') {
+    if (input.category !== 'Vegetables' && input.category !== 'Fruits' && input.category !== 'Proteins') {
+      return 'Fresh produce must be a vegetable, fruit, or fresh protein such as chicken, beef, meat, or fish.'
+    }
+    if (includesAny(input.name, processedFoodKeywords)) {
+      return 'That looks like a processed good. Add it under Processed goods with a manual expiry date.'
+    }
+  }
+
+  if (
+    kind === 'processed' &&
+    (input.category === 'Vegetables' ||
+      input.category === 'Fruits' ||
+      includesAny(input.name, freshFoodKeywords))
+  ) {
+    return 'Fresh produce should be added under Fresh produce so WasteWise can estimate its shelf life.'
+  }
+
+  return null
 }
 
 export function PantryTab() {
@@ -105,23 +156,26 @@ export function PantryTab() {
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [form, setForm] = useState<NewPantryItemInput>(emptyForm)
   const [itemKind, setItemKind] = useState<'processed' | 'fresh'>('processed')
-  const [freshProduce, setFreshProduce] = useState(produceOptions[0].value)
   const [notice, setNotice] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [consumingItem, setConsumingItem] = useState<PantryItem | null>(null)
+  const [consumedQuantity, setConsumedQuantity] = useState('')
+  const formRef = useRef<HTMLFormElement>(null)
+  const tableBodyRef = useRef<HTMLTableSectionElement>(null)
   const {
     pantryItems,
+    donationItems,
+    disposalItems,
     loading,
     error,
     addPantryItem,
     updatePantryItem,
-    markConsumed,
+    consumePantryQuantity,
     flagAction,
   } = useHouseholdBackend()
 
-  const selectedFreshProduce =
-    produceOptions.find((item) => item.value === freshProduce) ??
-    produceOptions[0]
   const estimatedFreshDays =
-    selectedFreshProduce.shelfLife[form.storageType] ?? 2
+    categoryShelfLife[form.category]?.[form.storageType] ?? 2
   const estimatedFreshExpiryDate = addDays(
     form.purchaseDate,
     estimatedFreshDays,
@@ -146,6 +200,15 @@ export function PantryTab() {
       return sortMode === 'soonest' ? first - second : second - first
     })
 
+  useEffect(() => {
+    if (!tableBodyRef.current) return
+    gsap.fromTo(
+      tableBodyRef.current.querySelectorAll('tr'),
+      { opacity: 0, y: 8 },
+      { opacity: 1, y: 0, duration: 0.3, stagger: 0.03, ease: 'power2.out' },
+    )
+  }, [filteredItems.length])
+
   const showNotice = (message: string) => {
     setNotice(message)
     window.setTimeout(() => setNotice(null), 2500)
@@ -155,8 +218,9 @@ export function PantryTab() {
     setForm(emptyForm)
     setEditingItemId(null)
     setItemKind('processed')
-    setFreshProduce(produceOptions[0].value)
+    setFormError(null)
     setFormMode('add')
+    window.setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth' }), 0)
   }
 
   const openEditForm = (item: PantryItem) => {
@@ -169,8 +233,10 @@ export function PantryTab() {
       expiryDate: item.expiryDate,
     })
     setEditingItemId(item.id)
-    setItemKind('processed')
+    setItemKind(item.itemKind ?? 'processed')
+    setFormError(null)
     setFormMode('edit')
+    window.setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth' }), 0)
   }
 
   const handleSubmitItem = async (event: FormEvent<HTMLFormElement>) => {
@@ -179,11 +245,16 @@ export function PantryTab() {
       itemKind === 'fresh'
         ? {
             ...form,
-            name: selectedFreshProduce.label,
-            category: selectedFreshProduce.category,
+            itemKind,
             expiryDate: estimatedFreshExpiryDate,
           }
-        : form
+        : { ...form, storageType: 'Counter' as StorageType, itemKind }
+    const validationMessage = validatePantryItem(submittedForm, itemKind)
+    if (validationMessage) {
+      setFormError(validationMessage)
+      return
+    }
+    setFormError(null)
 
     if (formMode === 'edit' && editingItemId) {
       await updatePantryItem(editingItemId, submittedForm)
@@ -214,8 +285,26 @@ export function PantryTab() {
   }
 
   const handleConsumed = async (item: PantryItem) => {
-    await markConsumed(item)
-    showNotice(`${item.name} marked as consumed.`)
+    setConsumingItem(item)
+    setConsumedQuantity('')
+    setFormError(null)
+  }
+
+  const submitConsumedQuantity = async () => {
+    if (!consumingItem) return
+    try {
+      await consumePantryQuantity(consumingItem, consumedQuantity.trim())
+      showNotice(`${consumingItem.name} consumption recorded.`)
+      setConsumingItem(null)
+      setConsumedQuantity('')
+      setFormError(null)
+    } catch (err) {
+      setFormError(
+        err instanceof Error
+          ? err.message
+          : 'Could not record that consumption amount.',
+      )
+    }
   }
 
   const getStatusColor = (status: PantryItem['status']) => {
@@ -273,38 +362,42 @@ export function PantryTab() {
 
       {formMode && (
         <form
+          ref={formRef}
           onSubmit={handleSubmitItem}
           className="mb-6 bg-white rounded-xl shadow-sm border border-gray-200 p-4 grid grid-cols-1 md:grid-cols-6 gap-3"
         >
+          <div className="md:col-span-6">
+            <h2 className="text-lg font-extrabold text-gray-900">
+              {formMode === 'edit' ? 'Edit pantry item' : 'Add pantry item'}
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              {formMode === 'edit'
+                ? 'Update the item details and save your changes.'
+                : 'Processed goods use a manual expiry date; fresh produce uses the estimator.'}
+            </p>
+          </div>
           <div className="md:col-span-6 flex rounded-lg bg-gray-100 p-1">
             <button
               type="button"
-              onClick={() => setItemKind('processed')}
+              onClick={() => {
+                setItemKind('processed')
+                setForm((current) => ({ ...current, category: 'Other' }))
+              }}
               className={`flex-1 rounded-md px-3 py-2 text-sm font-bold transition-colors ${itemKind === 'processed' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
             >
               Processed goods
             </button>
             <button
               type="button"
-              onClick={() => setItemKind('fresh')}
+              onClick={() => {
+                setItemKind('fresh')
+                setForm((current) => ({ ...current, category: 'Vegetables' }))
+              }}
               className={`flex-1 rounded-md px-3 py-2 text-sm font-bold transition-colors ${itemKind === 'fresh' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
             >
               Fresh produce
             </button>
           </div>
-          {itemKind === 'fresh' && (
-            <select
-              value={freshProduce}
-              onChange={(event) => setFreshProduce(event.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm md:col-span-2"
-            >
-              {produceOptions.map((produce) => (
-                <option key={produce.value} value={produce.value}>
-                  {produce.label}
-                </option>
-              ))}
-            </select>
-          )}
           <input
             required
             value={form.name}
@@ -312,8 +405,7 @@ export function PantryTab() {
               setForm((current) => ({ ...current, name: event.target.value }))
             }
             placeholder="Item name"
-            disabled={itemKind === 'fresh'}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm md:col-span-2 disabled:bg-gray-100 disabled:text-gray-500"
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm md:col-span-2"
           />
           <input
             required
@@ -335,57 +427,71 @@ export function PantryTab() {
                 category: event.target.value as PantryCategory,
               }))
             }
-            disabled={itemKind === 'fresh'}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500"
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
           >
             {categoryOptions.map((category) => (
               <option key={category}>{category}</option>
             ))}
           </select>
-          <select
-            value={form.storageType}
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                storageType: event.target.value as StorageType,
-              }))
-            }
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
-          >
-            {storageOptions.map((storage) => (
-              <option key={storage}>{storage}</option>
-            ))}
-          </select>
-          <input
-            required
-            type="date"
-            value={itemKind === 'fresh' ? estimatedFreshExpiryDate : form.expiryDate}
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                expiryDate: event.target.value,
-              }))
-            }
-            disabled={itemKind === 'fresh'}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500"
-          />
-          <input
-            required
-            type="date"
-            value={form.purchaseDate}
-            onChange={(event) =>
-              setForm((current) => ({
-                ...current,
-                purchaseDate: event.target.value,
-              }))
-            }
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm md:col-span-2"
-          />
+          {itemKind === 'fresh' && (
+            <select
+              value={form.storageType}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  storageType: event.target.value as StorageType,
+                }))
+              }
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
+            >
+              {storageOptions.map((storage) => (
+                <option key={storage}>{storage}</option>
+              ))}
+            </select>
+          )}
+          <label className="text-xs font-bold text-gray-500">
+            Expiry date
+            <input
+              required
+              type="date"
+              value={
+                itemKind === 'fresh' ? estimatedFreshExpiryDate : form.expiryDate
+              }
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  expiryDate: event.target.value,
+                }))
+              }
+              disabled={itemKind === 'fresh'}
+              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500"
+            />
+          </label>
+          <label className="text-xs font-bold text-gray-500 md:col-span-2">
+            Purchase date
+            <input
+              required
+              type="date"
+              value={form.purchaseDate}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  purchaseDate: event.target.value,
+                }))
+              }
+              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+            />
+          </label>
           {itemKind === 'fresh' && (
             <div className="md:col-span-6 rounded-lg border border-green-100 bg-green-50 px-3 py-2 text-sm font-semibold text-green-800">
               Estimated expiry: {displayDate(estimatedFreshExpiryDate)} based
-              on {selectedFreshProduce.label}, {form.storageType.toLowerCase()}{' '}
+              on {form.category.toLowerCase()}, {form.storageType.toLowerCase()}{' '}
               storage, and purchase date.
+            </div>
+          )}
+          {formError && (
+            <div className="md:col-span-6 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+              {formError}
             </div>
           )}
           <div className="flex gap-2 md:col-span-4 md:justify-end">
@@ -480,8 +586,19 @@ export function PantryTab() {
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filteredItems.map((item) => (
+            <tbody ref={tableBodyRef} className="divide-y divide-gray-100">
+              {filteredItems.map((item) => {
+                const hasDonation = donationItems.some(
+                  (action) => action.pantryItemId === item.id,
+                )
+                const hasDisposal = disposalItems.some(
+                  (action) => action.pantryItemId === item.id,
+                )
+                const isFreshProduce =
+                  item.itemKind === 'fresh' ||
+                  item.category === 'Vegetables' ||
+                  item.category === 'Fruits'
+                return (
                 <tr
                   key={item.id}
                   className="hover:bg-gray-50/50 transition-colors group"
@@ -530,34 +647,42 @@ export function PantryTab() {
                         <Pencil className="w-4 h-4" />
                         Edit
                       </button>
+                      {item.status !== 'Expired' && (
+                        <>
+                          <button
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-green-700 border border-green-100 hover:bg-green-50 rounded-md transition-colors"
+                            aria-label="Mark as consumed"
+                            onClick={() => handleConsumed(item)}
+                          >
+                            <Check className="w-4 h-4" />
+                            Eat
+                          </button>
+                          {!isFreshProduce && (
+                            <button
+                              disabled={hasDonation}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-orange-700 border border-orange-100 hover:bg-orange-50 rounded-md transition-colors disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
+                              onClick={() => handleFlag(item, 'donation')}
+                              aria-label={`Donate ${item.name}`}
+                            >
+                              <HandHeart className="w-4 h-4" />
+                              {hasDonation ? 'Donated' : 'Donate'}
+                            </button>
+                          )}
+                        </>
+                      )}
                       <button
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-green-700 border border-green-100 hover:bg-green-50 rounded-md transition-colors"
-                        aria-label="Mark as consumed"
-                        onClick={() => handleConsumed(item)}
-                      >
-                        <Check className="w-4 h-4" />
-                        Eat
-                      </button>
-                      <button
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-orange-700 border border-orange-100 hover:bg-orange-50 rounded-md transition-colors"
-                        onClick={() => handleFlag(item, 'donation')}
-                        aria-label={`Donate ${item.name}`}
-                      >
-                        <HandHeart className="w-4 h-4" />
-                        Donate
-                      </button>
-                      <button
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-red-700 border border-red-100 hover:bg-red-50 rounded-md transition-colors"
+                        disabled={hasDisposal}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-red-700 border border-red-100 hover:bg-red-50 rounded-md transition-colors disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
                         onClick={() => handleFlag(item, 'disposal')}
                         aria-label={`Dispose ${item.name}`}
                       >
                         <Recycle className="w-4 h-4" />
-                        Dispose
+                        {hasDisposal ? 'Queued' : 'Dispose'}
                       </button>
                     </div>
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
           {loading && (
@@ -575,6 +700,49 @@ export function PantryTab() {
           )}
         </div>
       </div>
+      {consumingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-extrabold text-gray-900">
+              Record consumption
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Available: {consumingItem.quantity}
+            </p>
+            <input
+              autoFocus
+              value={consumedQuantity}
+              onChange={(event) => setConsumedQuantity(event.target.value)}
+              placeholder={`Amount eaten, e.g. ${consumingItem.quantity}`}
+              className="mt-4 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-wastewise-green focus:outline-none focus:ring-2 focus:ring-wastewise-green/20"
+            />
+            {formError && (
+              <div className="mt-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                {formError}
+              </div>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setConsumingItem(null)
+                  setFormError(null)
+                }}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitConsumedQuantity}
+                className="rounded-lg bg-wastewise-green px-4 py-2 text-sm font-bold text-white hover:bg-green-800"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

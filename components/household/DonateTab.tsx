@@ -4,10 +4,34 @@ import {
   type ActionItem,
   type ActionStatus,
 } from './householdBackend'
-import { Calendar, HandHeart } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Calendar, HandHeart, RotateCcw } from 'lucide-react'
+import gsap from 'gsap'
 export function DonateTab() {
-  const { donationItems, loading, error, updateActionStatus } =
-    useHouseholdBackend()
+  const {
+    donationItems,
+    loading,
+    error,
+    updateActionStatus,
+    removeActionAndRestoreToPantry,
+  } = useHouseholdBackend()
+  const listRef = useRef<HTMLDivElement>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!listRef.current) return
+    gsap.fromTo(
+      listRef.current.querySelectorAll('.action-card'),
+      { opacity: 0, y: 10 },
+      { opacity: 1, y: 0, duration: 0.3, stagger: 0.04, ease: 'power2.out' },
+    )
+  }, [donationItems.length])
+
+  const handleRestore = async (item: ActionItem) => {
+    await removeActionAndRestoreToPantry(item)
+    setNotice(`${item.name} removed from donation and kept in pantry.`)
+    window.setTimeout(() => setNotice(null), 2500)
+  }
 
   const counts = {
     pending: donationItems.filter((i) => i.status === 'Pending').length,
@@ -61,12 +85,17 @@ export function DonateTab() {
           </p>
         </div>
       </div>
+      {notice && (
+        <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-800">
+          {notice}
+        </div>
+      )}
 
-      <div className="space-y-4">
+      <div ref={listRef} className="space-y-4">
         {donationItems.map((item) => (
           <div
             key={item.id}
-            className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+            className="action-card bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:-translate-y-0.5 hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
           >
             <div className="flex-1">
               <h3 className="text-lg font-bold text-gray-900">{item.name}</h3>
@@ -106,6 +135,14 @@ export function DonateTab() {
                 <option>Confirmed</option>
                 <option>Collected</option>
               </select>
+              <button
+                type="button"
+                onClick={() => handleRestore(item)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Back to pantry
+              </button>
             </div>
           </div>
         ))}

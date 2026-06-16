@@ -2,6 +2,8 @@
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendEmailVerification,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -55,9 +57,12 @@ export const signUp = async (
       name,
       email,
       role,
+      emailVerified: user.emailVerified,
       approvalStatus: requiresApproval(role) ? 'pending' : 'approved',
       createdAt: serverTimestamp(),
     })
+
+    await sendEmailVerification(user)
 
     return user
   } catch (error) {
@@ -92,6 +97,7 @@ export const signInWithGoogle = async (roleForNewUser: UserRole) => {
         name: user.displayName ?? 'WasteWise User',
         email: user.email ?? '',
         role: roleForNewUser,
+        emailVerified: user.emailVerified,
         approvalStatus: requiresApproval(roleForNewUser) ? 'pending' : 'approved',
         createdAt: serverTimestamp(),
       })
@@ -163,6 +169,26 @@ export const rejectPartner = async (userId: string) => {
     )
   } catch (error) {
     console.error('Error rejecting partner:', error)
+    throw error
+  }
+}
+
+export const sendResetPasswordEmail = async (email: string) => {
+  try {
+    await sendPasswordResetEmail(auth, email)
+  } catch (error) {
+    console.error('Password reset error:', error)
+    throw error
+  }
+}
+
+export const resendVerificationEmail = async () => {
+  try {
+    const user = auth.currentUser
+    if (!user) throw new Error('Please log in again to verify your email.')
+    await sendEmailVerification(user)
+  } catch (error) {
+    console.error('Email verification error:', error)
     throw error
   }
 }

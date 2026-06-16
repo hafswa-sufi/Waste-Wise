@@ -7,6 +7,7 @@ import {
   MapPin,
   Recycle,
   Route,
+  CheckCheck,
 } from 'lucide-react'
 import {
   displayDate,
@@ -34,12 +35,21 @@ function actionCopy(item: ActionItem) {
 export function HouseholdNotifications() {
   const [params] = useSearchParams()
   const selectedId = params.get('item')
-  const { donationItems, disposalItems, loading, error } = useHouseholdBackend()
+  const {
+    donationItems,
+    disposalItems,
+    notifications,
+    loading,
+    error,
+    updateNotificationRead,
+    markAllNotificationsRead,
+  } = useHouseholdBackend()
   const actions = [...donationItems, ...disposalItems].sort((a, b) => {
     const first = new Date(`${a.pickupDate}T00:00:00`).getTime()
     const second = new Date(`${b.pickupDate}T00:00:00`).getTime()
     return first - second
   })
+  const unreadCount = notifications.filter((item) => !item.read).length
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -59,13 +69,26 @@ export function HouseholdNotifications() {
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
-            Pickup Notifications
-          </h1>
-          <p className="mt-1 text-gray-500">
-            Donation and disposal updates with partner, route, and pickup
-            status.
-          </p>
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+                Pickup Notifications
+              </h1>
+              <p className="mt-1 text-gray-500">
+                Donation and disposal updates with partner, route, and pickup
+                status.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={markAllNotificationsRead}
+              disabled={unreadCount === 0}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <CheckCheck className="w-4 h-4" />
+              Mark all read
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
@@ -74,10 +97,11 @@ export function HouseholdNotifications() {
               const isDonation = item.type === 'donation'
               const Icon = isDonation ? HandHeart : Recycle
               const selected = selectedId === item.id
+              const isRead = item.notificationRead === true
               return (
                 <article
                   key={item.id}
-                  className={`bg-white rounded-xl border p-5 shadow-sm ${selected ? 'border-wastewise-green ring-2 ring-wastewise-green/20' : 'border-gray-200'}`}
+                  className={`bg-white rounded-xl border p-5 shadow-sm ${selected ? 'border-wastewise-green ring-2 ring-wastewise-green/20' : isRead ? 'border-gray-200' : 'border-yellow-200 ring-2 ring-yellow-100'}`}
                 >
                   <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                     <div className="flex items-start gap-4">
@@ -98,11 +122,18 @@ export function HouseholdNotifications() {
                         </p>
                       </div>
                     </div>
-                    <span
-                      className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${statusClass(item.status)}`}
-                    >
-                      {item.status}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {!isRead && (
+                        <span className="inline-flex rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-xs font-bold text-yellow-800">
+                          Unread
+                        </span>
+                      )}
+                      <span
+                        className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${statusClass(item.status)}`}
+                      >
+                        {item.status}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -151,6 +182,13 @@ export function HouseholdNotifications() {
                     >
                       View tracking tab
                     </Link>
+                    <button
+                      type="button"
+                      onClick={() => updateNotificationRead(item.id, !isRead)}
+                      className="inline-flex items-center justify-center rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50"
+                    >
+                      {isRead ? 'Mark unread' : 'Mark read'}
+                    </button>
                   </div>
                 </article>
               )

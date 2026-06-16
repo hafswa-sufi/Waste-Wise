@@ -21,7 +21,7 @@ export type PantryCategory =
   | 'Dairy'
   | 'Fruits'
   | 'Proteins'
-  | 'Pantry'
+  | 'Other'
 
 export type StorageType = 'Fridge' | 'Counter' | 'Basket'
 export type PantryStatus = 'Fresh' | 'Expiring Soon' | 'Expired'
@@ -37,6 +37,7 @@ export interface PantryItem {
   purchaseDate: string
   expiryDate: string
   status: PantryStatus
+  itemKind?: 'processed' | 'fresh'
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }
@@ -46,6 +47,8 @@ export interface AlertItem {
   pantryItemId: string
   name: string
   category: PantryCategory
+  itemKind: 'processed' | 'fresh' | undefined
+  quantity: string
   countdown: string
   storageLocation: string
   status: 'expired' | 'expiring-soon' | 'this-week'
@@ -60,6 +63,7 @@ export interface ActionItem {
   partner: string
   pickupDate: string
   status: ActionStatus
+  notificationRead?: boolean
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }
@@ -70,6 +74,8 @@ export interface NotificationItem {
   message: string
   meta: string
   href: string
+  actionId: string
+  read: boolean
   tone: 'info' | 'success' | 'warning'
 }
 
@@ -80,6 +86,7 @@ export interface NewPantryItemInput {
   storageType: StorageType
   purchaseDate: string
   expiryDate: string
+  itemKind?: 'processed' | 'fresh'
 }
 
 export interface NewActionInput {
@@ -95,9 +102,6 @@ const donationPartners = ['Food Banking Kenya', 'Hand in Hand Eastern Africa']
 const disposalPartners = ['Taka Taka Solutions', 'Mr. Green Africa']
 const localPantryKey = 'wastewise.household.pantryItems'
 const localActionsKey = 'wastewise.household.actions'
-
-const demoSeedKey = 'wastewise.household.demoSeeded'
-const demoSeedVersion = 'v2'
 
 function householdCollection(userId: string, name: string) {
   return collection(db, 'users', userId, name)
@@ -161,12 +165,13 @@ function normalizePantryItem(id: string, data: DocumentData): PantryItem {
   return {
     id,
     name: asString(data.name, 'Unnamed item'),
-    category: asString(data.category, 'Pantry') as PantryCategory,
+    category: asString(data.category, 'Other') as PantryCategory,
     quantity: asString(data.quantity, '1 item'),
     storageType: asString(data.storageType, 'Counter') as StorageType,
     purchaseDate: asString(data.purchaseDate),
     expiryDate,
     status: statusForExpiry(expiryDate),
+    itemKind: asString(data.itemKind) as PantryItem['itemKind'],
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
   }
@@ -182,8 +187,52 @@ function normalizeActionItem(id: string, data: DocumentData): ActionItem {
     partner: asString(data.partner, 'Partner pending'),
     pickupDate: asString(data.pickupDate),
     status: asString(data.status, 'Pending') as ActionStatus,
+    notificationRead: data.notificationRead === true,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
+  }
+}
+
+function parseQuantity(value: string) {
+  const match = value.trim().match(/^(\d+(?:\.\d+)?)\s*(.*)$/)
+  if (!match) return null
+
+  const amount = Number(match[1])
+  if (!Number.isFinite(amount)) return null
+
+  return {
+    amount,
+    unit: match[2].trim(),
+  }
+}
+
+function formatQuantity(amount: number, unit: string) {
+  const rounded = Number(amount.toFixed(2))
+  return `${rounded}${unit ? ` ${unit}` : ''}`
+}
+
+function remainingQuantity(currentQuantity: string, consumedQuantity: string) {
+  const current = parseQuantity(currentQuantity)
+  const consumed = parseQuantity(consumedQuantity)
+
+  if (!current || !consumed || consumed.amount <= 0) {
+    throw new Error('Enter a valid amount to consume, for example 0.5 kg or 2 pieces.')
+  }
+
+  const currentUnit = current.unit.toLowerCase()
+  const consumedUnit = consumed.unit.toLowerCase()
+  if (currentUnit && consumedUnit && currentUnit !== consumedUnit) {
+    throw new Error(`Use the same unit as the pantry quantity: ${current.unit}.`)
+  }
+
+  if (consumed.amount > current.amount) {
+    throw new Error(`You only have ${currentQuantity} available.`)
+  }
+
+  const remainingAmount = current.amount - consumed.amount
+  return {
+    isFinished: remainingAmount <= 0,
+    quantity: formatQuantity(remainingAmount, current.unit || consumed.unit),
   }
 }
 
@@ -195,14 +244,21 @@ function pickPartner(type: HouseholdActionType) {
 function defaultPickupDate() {
   const date = new Date()
   date.setDate(date.getDate() + 2)
-  return date.toISOString().slice(0, 10)
+  return toDateInputValue(date)
+}
+
+function toDateInputValue(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function relativeDate(daysFromToday: number) {
   const date = new Date()
   date.setHours(0, 0, 0, 0)
   date.setDate(date.getDate() + daysFromToday)
-  return date.toISOString().slice(0, 10)
+  return toDateInputValue(date)
 }
 
 function samplePantryItems(): NewPantryItemInput[] {
@@ -437,6 +493,8 @@ export function useHouseholdBackend() {
             pantryItemId: item.id,
             name: item.name,
             category: item.category,
+            itemKind: item.itemKind,
+            quantity: item.quantity,
             countdown: countdownForExpiry(item.expiryDate),
             storageLocation: `${item.storageType} - Household pantry`,
             status,
@@ -468,6 +526,8 @@ export function useHouseholdBackend() {
             message: `${item.partner} ${statusText} for ${item.name}.`,
             meta: `${displayDate(item.pickupDate)} - Household location route`,
             href: `/household/notifications?item=${item.id}`,
+            actionId: item.id,
+            read: item.notificationRead === true,
             tone: isCollected ? 'success' : item.status === 'Confirmed' ? 'info' : 'warning',
           }
         }),
@@ -562,8 +622,9 @@ export function useHouseholdBackend() {
       name: input.name,
       quantity: input.quantity,
       partner: input.partner || 'Household',
-      pickupDate: input.pickupDate || new Date().toISOString().slice(0, 10),
+      pickupDate: input.pickupDate || toDateInputValue(new Date()),
       status,
+      notificationRead: false,
     }
     setActions((current) => {
       const next = [nextItem, ...current]
@@ -598,8 +659,9 @@ export function useHouseholdBackend() {
         name: item.name,
         quantity: item.quantity,
         partner: 'Household',
-        pickupDate: new Date().toISOString().slice(0, 10),
+        pickupDate: toDateInputValue(new Date()),
         status: 'Collected',
+        notificationRead: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
@@ -623,7 +685,93 @@ export function useHouseholdBackend() {
     }
   }
 
+  async function consumePantryQuantity(
+    item: Pick<PantryItem, 'id' | 'name' | 'quantity'>,
+    consumedQuantity: string,
+  ) {
+    const remaining = remainingQuantity(item.quantity, consumedQuantity)
+
+    if (!currentUser) {
+      recordLocalAction(
+        {
+          type: 'consumed',
+          pantryItemId: item.id,
+          name: item.name,
+          quantity: consumedQuantity,
+        },
+        'Collected',
+      )
+      setPantryItems((current) => {
+        const next = remaining.isFinished
+          ? current.filter((pantryItem) => pantryItem.id !== item.id)
+          : current.map((pantryItem) =>
+              pantryItem.id === item.id
+                ? { ...pantryItem, quantity: remaining.quantity }
+                : pantryItem,
+            )
+        writeLocalItems(localPantryKey, next)
+        return next
+      })
+      return
+    }
+
+    try {
+      await addDoc(householdCollection(currentUser.uid, 'householdActions'), {
+        type: 'consumed',
+        pantryItemId: item.id,
+        name: item.name,
+        quantity: consumedQuantity,
+        partner: 'Household',
+        pickupDate: toDateInputValue(new Date()),
+        status: 'Collected',
+        notificationRead: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+      if (remaining.isFinished) {
+        await deleteDoc(doc(db, 'users', currentUser.uid, 'pantryItems', item.id))
+      } else {
+        await updateDoc(doc(db, 'users', currentUser.uid, 'pantryItems', item.id), {
+          quantity: remaining.quantity,
+          updatedAt: serverTimestamp(),
+        })
+      }
+    } catch (err) {
+      if (!isPermissionError(err)) throw err
+      recordLocalAction(
+        {
+          type: 'consumed',
+          pantryItemId: item.id,
+          name: item.name,
+          quantity: consumedQuantity,
+        },
+        'Collected',
+      )
+      setPantryItems((current) => {
+        const next = remaining.isFinished
+          ? current.filter((pantryItem) => pantryItem.id !== item.id)
+          : current.map((pantryItem) =>
+              pantryItem.id === item.id
+                ? { ...pantryItem, quantity: remaining.quantity }
+                : pantryItem,
+            )
+        writeLocalItems(localPantryKey, next)
+        return next
+      })
+    }
+  }
+
   async function flagAction(input: NewActionInput) {
+    if (
+      input.pantryItemId &&
+      actions.some(
+        (item) =>
+          item.type === input.type && item.pantryItemId === input.pantryItemId,
+      )
+    ) {
+      return
+    }
+
     if (!currentUser) {
       recordLocalAction(
         {
@@ -645,6 +793,7 @@ export function useHouseholdBackend() {
         partner: input.partner || pickPartner(input.type),
         pickupDate: input.pickupDate || defaultPickupDate(),
         status: 'Pending',
+        notificationRead: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
@@ -693,6 +842,83 @@ export function useHouseholdBackend() {
     }
   }
 
+  async function removeActionAndRestoreToPantry(action: ActionItem) {
+    const alreadyInPantry =
+      !!action.pantryItemId &&
+      pantryItems.some((item) => item.id === action.pantryItemId)
+
+    if (!currentUser) {
+      setActions((current) => {
+        const next = current.filter((item) => item.id !== action.id)
+        writeLocalItems(localActionsKey, next)
+        return next
+      })
+      if (!alreadyInPantry) {
+        const restoredItem: PantryItem = {
+          id: action.pantryItemId || createLocalId('pantry'),
+          name: action.name,
+          category: 'Other',
+          quantity: action.quantity,
+          storageType: 'Counter',
+          purchaseDate: toDateInputValue(new Date()),
+          expiryDate: defaultPickupDate(),
+          status: 'Fresh',
+          itemKind: 'processed',
+        }
+        setPantryItems((current) => {
+          const next = [restoredItem, ...current]
+          writeLocalItems(localPantryKey, next)
+          return next
+        })
+      }
+      return
+    }
+
+    try {
+      await deleteDoc(
+        doc(db, 'users', currentUser.uid, 'householdActions', action.id),
+      )
+      if (!alreadyInPantry) {
+        await addDoc(householdCollection(currentUser.uid, 'pantryItems'), {
+          name: action.name,
+          category: 'Other',
+          quantity: action.quantity,
+          storageType: 'Counter',
+          purchaseDate: toDateInputValue(new Date()),
+          expiryDate: defaultPickupDate(),
+          itemKind: 'processed',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })
+      }
+    } catch (err) {
+      if (!isPermissionError(err)) throw err
+      setActions((current) => {
+        const next = current.filter((item) => item.id !== action.id)
+        writeLocalItems(localActionsKey, next)
+        return next
+      })
+      if (!alreadyInPantry) {
+        const restoredItem: PantryItem = {
+          id: action.pantryItemId || createLocalId('pantry'),
+          name: action.name,
+          category: 'Other',
+          quantity: action.quantity,
+          storageType: 'Counter',
+          purchaseDate: toDateInputValue(new Date()),
+          expiryDate: defaultPickupDate(),
+          status: 'Fresh',
+          itemKind: 'processed',
+        }
+        setPantryItems((current) => {
+          const next = [restoredItem, ...current]
+          writeLocalItems(localPantryKey, next)
+          return next
+        })
+      }
+    }
+  }
+
   async function seedMockData() {
     const pantrySamples = samplePantryItems()
     const actionSamples = sampleActions()
@@ -710,6 +936,7 @@ export function useHouseholdBackend() {
       partner: item.partner || pickPartner(item.type),
       pickupDate: item.pickupDate || defaultPickupDate(),
       status: 'Pending',
+      notificationRead: false,
     }))
 
     if (!currentUser) {
@@ -740,6 +967,7 @@ export function useHouseholdBackend() {
             ...item,
             pantryItemId: item.pantryItemId ?? null,
             status: 'Pending',
+            notificationRead: false,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           }),
@@ -760,19 +988,48 @@ export function useHouseholdBackend() {
     }
   }
 
-  useEffect(() => {
-    if (loading) return
-
-    const seedKey = `${demoSeedKey}.${demoSeedVersion}.${currentUser?.uid ?? 'local'}`
-    if (window.localStorage.getItem(seedKey)) return
-    if (pantryItems.length >= 8 && actions.length >= 4) {
-      window.localStorage.setItem(seedKey, 'true')
+  async function updateNotificationRead(actionId: string, read: boolean) {
+    if (!currentUser) {
+      setActions((current) => {
+        const next = current.map((item) =>
+          item.id === actionId ? { ...item, notificationRead: read } : item,
+        )
+        writeLocalItems(localActionsKey, next)
+        return next
+      })
       return
     }
 
-    window.localStorage.setItem(seedKey, 'true')
-    void seedMockData()
-  }, [actions.length, currentUser?.uid, loading, pantryItems.length])
+    try {
+      await updateDoc(
+        doc(db, 'users', currentUser.uid, 'householdActions', actionId),
+        {
+          notificationRead: read,
+          updatedAt: serverTimestamp(),
+        },
+      )
+    } catch (err) {
+      if (!isPermissionError(err)) throw err
+      setActions((current) => {
+        const next = current.map((item) =>
+          item.id === actionId ? { ...item, notificationRead: read } : item,
+        )
+        writeLocalItems(localActionsKey, next)
+        return next
+      })
+    }
+  }
+
+  async function markAllNotificationsRead() {
+    const readableActions = actions.filter(
+      (item) =>
+        (item.type === 'donation' || item.type === 'disposal') &&
+        !item.notificationRead,
+    )
+    await Promise.all(
+      readableActions.map((item) => updateNotificationRead(item.id, true)),
+    )
+  }
 
   return {
     pantryItems,
@@ -780,13 +1037,18 @@ export function useHouseholdBackend() {
     notifications,
     donationItems: actions.filter((item) => item.type === 'donation'),
     disposalItems: actions.filter((item) => item.type === 'disposal'),
+    consumedItems: actions.filter((item) => item.type === 'consumed'),
     loading,
     error,
     addPantryItem,
     updatePantryItem,
     markConsumed,
+    consumePantryQuantity,
     flagAction,
     updateActionStatus,
+    removeActionAndRestoreToPantry,
+    updateNotificationRead,
+    markAllNotificationsRead,
     seedMockData,
   }
 }

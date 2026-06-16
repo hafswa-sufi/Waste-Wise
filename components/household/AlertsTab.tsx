@@ -1,10 +1,11 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useHouseholdBackend, type AlertItem } from './householdBackend'
 import { MapPin } from 'lucide-react'
 import gsap from 'gsap'
 export function AlertsTab() {
   const containerRef = useRef<HTMLDivElement>(null)
-  const { alerts, loading, error, markConsumed, flagAction } =
+  const [notice, setNotice] = useState<string | null>(null)
+  const { alerts, loading, error, consumePantryQuantity, flagAction } =
     useHouseholdBackend()
 
   useEffect(() => {
@@ -54,6 +55,10 @@ export function AlertsTab() {
     expired: alerts.filter((i) => i.status === 'expired').length,
     expiringSoon: alerts.filter((i) => i.status === 'expiring-soon').length,
     thisWeek: alerts.filter((i) => i.status === 'this-week').length,
+  }
+  const showNotice = (message: string) => {
+    setNotice(message)
+    window.setTimeout(() => setNotice(null), 2500)
   }
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -107,39 +112,65 @@ export function AlertsTab() {
               </div>
             </div>
 
-            <div className="mt-auto grid grid-cols-3 gap-2">
-              <button
-                onClick={() =>
-                  markConsumed({
-                    id: item.pantryItemId,
-                    name: item.name,
-                    quantity: '1 item',
-                  })
-                }
-                className="py-2 px-1 text-xs font-bold text-green-700 border border-green-600 rounded-lg hover:bg-green-50 transition-colors text-center"
-              >
-                Consume
-              </button>
-              <button
-                onClick={() =>
-                  flagAction({
-                    type: 'donation',
-                    pantryItemId: item.pantryItemId,
-                    name: item.name,
-                    quantity: '1 item',
-                  })
-                }
-                className="py-2 px-1 text-xs font-bold text-white bg-wastewise-orange rounded-lg hover:bg-orange-600 transition-colors text-center"
-              >
-                Donate
-              </button>
+            <div
+              className={`mt-auto grid gap-2 ${item.status === 'expired' ? 'grid-cols-1' : 'grid-cols-3'}`}
+            >
+              {item.status !== 'expired' && (
+                <>
+                  <button
+                    onClick={async () => {
+                      const amount = window.prompt(
+                        `How much ${item.name} did you consume?`,
+                        item.quantity,
+                      )
+                      if (!amount) return
+                      try {
+                        await consumePantryQuantity(
+                          {
+                            id: item.pantryItemId,
+                            name: item.name,
+                            quantity: item.quantity,
+                          },
+                          amount,
+                        )
+                      } catch (err) {
+                        showNotice(
+                          err instanceof Error
+                            ? err.message
+                            : 'Could not record that consumption amount.',
+                        )
+                      }
+                    }}
+                    className="py-2 px-1 text-xs font-bold text-green-700 border border-green-600 rounded-lg hover:bg-green-50 transition-colors text-center"
+                  >
+                    Consume
+                  </button>
+                  {item.itemKind !== 'fresh' &&
+                    item.category !== 'Vegetables' &&
+                    item.category !== 'Fruits' && (
+                    <button
+                      onClick={() =>
+                        flagAction({
+                          type: 'donation',
+                          pantryItemId: item.pantryItemId,
+                          name: item.name,
+                          quantity: item.quantity,
+                        })
+                      }
+                      className="py-2 px-1 text-xs font-bold text-white bg-wastewise-orange rounded-lg hover:bg-orange-600 transition-colors text-center"
+                    >
+                      Donate
+                    </button>
+                  )}
+                </>
+              )}
               <button
                 onClick={() =>
                   flagAction({
                     type: 'disposal',
                     pantryItemId: item.pantryItemId,
                     name: item.name,
-                    quantity: '1 item',
+                    quantity: item.quantity,
                   })
                 }
                 className="py-2 px-1 text-xs font-bold text-red-600 border border-red-500 rounded-lg hover:bg-red-50 transition-colors text-center"
@@ -150,6 +181,11 @@ export function AlertsTab() {
           </div>
         ))}
       </div>
+      {notice && (
+        <div className="mb-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {notice}
+        </div>
+      )}
       {loading && (
         <div className="py-10 text-center text-gray-500">Loading alerts...</div>
       )}

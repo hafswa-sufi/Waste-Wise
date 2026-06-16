@@ -5,6 +5,7 @@ import type { TabType } from '../household/HouseholdNavBar'
 import { PantryTab } from '../household/PantryTab'
 import { AlertsTab } from '../household/AlertsTab'
 import { FreshnessTab } from '../household/FreshnessTab'
+import { ConsumedTab } from '../household/ConsumedTab'
 import { DonateTab } from '../household/DonateTab'
 import { DisposeTab } from '../household/DisposeTab'
 import { useScreenInit } from '../../useScreenInit'
@@ -55,6 +56,8 @@ export function Household() {
         return <AlertsTab />
       case 'freshness':
         return <FreshnessTab />
+      case 'consumed':
+        return <ConsumedTab />
       case 'donate':
         return <DonateTab />
       case 'dispose':
@@ -70,7 +73,14 @@ export function Household() {
       {/* Mobile Tab Navigation (visible only on small screens) */}
       <div className="md:hidden flex overflow-x-auto bg-white border-b border-gray-200 px-2 py-2 hide-scrollbar">
         {(
-          ['pantry', 'alerts', 'freshness', 'donate', 'dispose'] as TabType[]
+          [
+            'pantry',
+            'alerts',
+            'freshness',
+            'consumed',
+            'donate',
+            'dispose',
+          ] as TabType[]
         ).map((tab) => (
           <button
             key={tab}

@@ -1,7 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { login, signInWithGoogle } from '../../src/service/authService'
+import {
+  login,
+  sendResetPasswordEmail,
+  signInWithGoogle,
+} from '../../src/service/authService'
 import { authErrorMessage } from './authErrors'
 
 interface LoginProps {
@@ -17,6 +21,7 @@ export function Login({ onSignupClick }: LoginProps) {
   >('household')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
   const selectedRole =
@@ -50,6 +55,7 @@ export function Login({ onSignupClick }: LoginProps) {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
+    setMessage(null)
 
     if (!email.trim()) {
       setError('Email address is required.')
@@ -79,6 +85,7 @@ export function Login({ onSignupClick }: LoginProps) {
 
   const handleGoogleLogin = async () => {
     setError(null)
+    setMessage(null)
     setIsLoading(true)
 
     try {
@@ -91,6 +98,25 @@ export function Login({ onSignupClick }: LoginProps) {
         return
       }
       setError(message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handlePasswordReset = async () => {
+    setError(null)
+    setMessage(null)
+    if (!email.trim()) {
+      setError('Enter your email address first, then request a reset link.')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      await sendResetPasswordEmail(email.trim())
+      setMessage('Password reset email sent. Check your inbox.')
+    } catch (err) {
+      setError(authErrorMessage(err, 'Could not send reset email. Try again.'))
     } finally {
       setIsLoading(false)
     }
@@ -147,6 +173,7 @@ export function Login({ onSignupClick }: LoginProps) {
               </label>
               <button
                 type="button"
+                onClick={handlePasswordReset}
                 className="text-sm font-bold text-wastewise-green hover:underline"
               >
                 Forgot Password?
@@ -179,6 +206,11 @@ export function Login({ onSignupClick }: LoginProps) {
           {error && (
             <p className="text-sm text-red-600 font-medium" role="alert">
               {error}
+            </p>
+          )}
+          {message && (
+            <p className="text-sm text-green-700 font-medium" role="status">
+              {message}
             </p>
           )}
 

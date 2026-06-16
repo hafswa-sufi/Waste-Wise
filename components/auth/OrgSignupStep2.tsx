@@ -1,5 +1,6 @@
 import React from 'react'
-import { UploadCloud, Info } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ArrowLeft, UploadCloud, Info } from 'lucide-react'
 
 const UploadCloudIcon = UploadCloud as unknown as React.ComponentType<
   React.SVGProps<SVGSVGElement>
@@ -19,6 +20,14 @@ export function OrgSignupStep2({ onSubmit, onBack }: OrgSignupStep2Props) {
   }
   return (
     <div className="w-full max-w-2xl mx-auto px-4 py-12">
+      <Link
+        to="/"
+        className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-wastewise-green"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back to home
+      </Link>
+
       <div className="text-center mb-8">
         <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">
           Partner Registration

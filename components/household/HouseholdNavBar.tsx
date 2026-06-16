@@ -8,6 +8,7 @@ import {
   HandHeart,
   Trash2,
   Sparkles,
+  CheckCircle2,
   X,
 } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -15,7 +16,13 @@ import { useAuth } from '../../src/context/useAuth'
 import { logout } from '../../src/service/authService'
 import { useHouseholdBackend } from './householdBackend'
 
-export type TabType = 'pantry' | 'alerts' | 'freshness' | 'donate' | 'dispose'
+export type TabType =
+  | 'pantry'
+  | 'alerts'
+  | 'freshness'
+  | 'consumed'
+  | 'donate'
+  | 'dispose'
 
 interface HouseholdNavbarProps {
   activeTab: TabType
@@ -30,6 +37,7 @@ const tabs: {
   { id: 'pantry', label: 'Pantry', icon: Package },
   { id: 'alerts', label: 'Alerts', icon: BellIcon },
   { id: 'freshness', label: 'Freshness', icon: Sparkles },
+  { id: 'consumed', label: 'Consumed', icon: CheckCircle2 },
   { id: 'donate', label: 'Donate', icon: HandHeart },
   { id: 'dispose', label: 'Dispose', icon: Trash2 },
 ]
@@ -50,9 +58,7 @@ export function HouseholdNavbar({
       .slice(0, 2)
       .toUpperCase() || 'WK'
 
-  const notificationCount = notifications.filter(
-    (item) => item.tone !== 'success',
-  ).length
+  const notificationCount = notifications.filter((item) => !item.read).length
 
   const handleLogout = async () => {
     await logout()

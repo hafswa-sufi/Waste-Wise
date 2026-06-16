@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { Eye, EyeOff } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
 import { signInWithGoogle, signUp } from '../../src/service/authService'
 import { authErrorMessage } from './authErrors'
 
@@ -65,6 +65,14 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
 
   return (
     <div className="w-full max-w-md mx-auto px-4 py-12">
+      <Link
+        to="/"
+        className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-wastewise-green"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back to home
+      </Link>
+
       <div className="text-center mb-8">
         <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">
           Create Household Account
@@ -137,28 +145,6 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
               <option value="Nakuru">Nakuru</option>
               <option value="Uasin Gishu">Uasin Gishu</option>
             </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              Primary Storage Conditions
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {['Fridge', 'Counter', 'Basket'].map((opt) => (
-                <label
-                  key={opt}
-                  className="flex items-center justify-center px-3 py-2 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors has-checked:bg-green-50 has-checked:border-wastewise-green has-checked:text-wastewise-green font-medium text-sm text-gray-600"
-                >
-                  <input
-                    type="radio"
-                    name="storage"
-                    value={opt}
-                    className="sr-only"
-                  />
-                  {opt}
-                </label>
-              ))}
-            </div>
           </div>
 
           {error && (

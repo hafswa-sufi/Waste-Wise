@@ -7,13 +7,14 @@ import {
   KeyRound,
   Leaf,
   LogOut,
+  MailCheck,
   MapPin,
   Save,
   User,
 } from 'lucide-react'
 import { auth, db } from '../../src/firebase/firebase'
 import { useAuth } from '../../src/context/useAuth'
-import { logout } from '../../src/service/authService'
+import { logout, resendVerificationEmail } from '../../src/service/authService'
 import { authErrorMessage } from '../auth/authErrors'
 
 export function HouseholdProfile() {
@@ -27,6 +28,7 @@ export function HouseholdProfile() {
   const [location, setLocation] = useState(locationFromProfile)
   const [newPassword, setNewPassword] = useState('')
   const [saving, setSaving] = useState(false)
+  const [verificationSending, setVerificationSending] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [logoutOpen, setLogoutOpen] = useState(false)
@@ -81,6 +83,22 @@ export function HouseholdProfile() {
     navigate('/auth', { replace: true, state: { authState: 'login' } })
   }
 
+  const handleResendVerification = async () => {
+    setMessage(null)
+    setError(null)
+    setVerificationSending(true)
+    try {
+      await resendVerificationEmail()
+      setMessage('Verification email sent. Check your inbox.')
+    } catch (err) {
+      setError(
+        authErrorMessage(err, 'Could not send verification email. Try again.'),
+      )
+    } finally {
+      setVerificationSending(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="h-16 bg-white border-b border-gray-200 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-50 shadow-sm">
@@ -121,6 +139,26 @@ export function HouseholdProfile() {
             <p className="mt-3 inline-flex rounded-full bg-green-50 px-3 py-1 text-xs font-bold text-wastewise-green">
               {userData?.role || 'Household'}
             </p>
+            <div
+              className={`mt-4 rounded-lg border px-3 py-3 text-sm font-semibold ${currentUser?.emailVerified ? 'border-green-100 bg-green-50 text-green-700' : 'border-yellow-100 bg-yellow-50 text-yellow-800'}`}
+            >
+              <div className="flex items-center gap-2">
+                <MailCheck className="w-4 h-4" />
+                {currentUser?.emailVerified
+                  ? 'Email verified'
+                  : 'Email not verified'}
+              </div>
+              {!currentUser?.emailVerified && (
+                <button
+                  type="button"
+                  onClick={handleResendVerification}
+                  disabled={verificationSending}
+                  className="mt-3 rounded-lg bg-white px-3 py-2 text-xs font-bold text-yellow-800 border border-yellow-200 hover:bg-yellow-50 disabled:opacity-60"
+                >
+                  {verificationSending ? 'Sending...' : 'Resend verification'}
+                </button>
+              )}
+            </div>
           </aside>
 
           <form
