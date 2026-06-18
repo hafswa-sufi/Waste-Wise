@@ -1,12 +1,12 @@
 import { useState, useRef } from 'react'
-import { useLocation, Link } from 'react-router-dom'
+import { useLocation, Link, useSearchParams } from 'react-router-dom'
 import { Leaf } from 'lucide-react'
 import gsap from 'gsap'
-import { signInWithGoogle } from '../../src/service/authService'
+import { signInWithGoogle, signUp } from '../../src/service/authService'
 import { useScreenInit } from '../../useScreenInit'
 import { RoleSelect } from '../auth/RoleSelect'
 import { HouseholdSignup } from '../auth/HouseholdSignup'
-import { OrgSignupStep1 } from '../auth/OrgSignupStep1'
+import { OrgSignupStep1, type OrgSignupDraft } from '../auth/OrgSignupStep1'
 import { OrgSignupStep2 } from '../auth/OrgSignupStep2'
 import { OrgPending } from '../auth/OrgPending'
 import { Login } from '../auth/Login'
@@ -20,10 +20,16 @@ export type AuthState =
 export type OrgType = 'NGO' | 'Recycling Company'
 export function Auth() {
   const location = useLocation()
+  const [searchParams] = useSearchParams()
+  const authError =
+    typeof location.state?.authError === 'string'
+      ? location.state.authError
+      : null
   const screenInit = useScreenInit()
   const [authState, setAuthState] = useState<AuthState>(() => {
     if (screenInit?.authState) return screenInit.authState as AuthState
     if (location.state?.authState) return location.state.authState as AuthState
+    if (searchParams.get('mode') === 'login') return 'login'
     return 'role-select'
   })
   const [orgType, setOrgType] = useState<OrgType>(() => {
@@ -31,10 +37,51 @@ export function Auth() {
     if (location.state?.orgType) return location.state.orgType as OrgType
     return 'NGO'
   })
+  const [orgSignupDraft, setOrgSignupDraft] =
+    useState<OrgSignupDraft | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const handlePartnerGoogleSignup = async () => {
-    await signInWithGoogle(orgType === 'NGO' ? 'NGO' : 'RecyclingFirm')
+  const partnerRole = (type: OrgType) =>
+    type === 'NGO' ? 'NGO' : 'RecyclingFirm'
+
+  const handlePartnerGoogleSignup = async (
+    draft: Omit<OrgSignupDraft, 'password'>,
+  ) => {
+    await signInWithGoogle(partnerRole(draft.organizationType), {
+      organizationName: draft.organizationName,
+      organizationType: draft.organizationType,
+      registrationNumber: draft.registrationNumber,
+      operatingCounties: draft.operatingCounties,
+      contactName: draft.contactName,
+      designation: draft.designation,
+      verificationDocumentStatus: 'not_submitted',
+    })
+    transitionTo('org-pending')
+  }
+
+  const handlePartnerSubmit = async (certificateFileName: string) => {
+    if (!orgSignupDraft) {
+      transitionTo('org-signup-step1')
+      return
+    }
+    await signUp(
+      orgSignupDraft.contactName,
+      orgSignupDraft.workEmail,
+      orgSignupDraft.password,
+      partnerRole(orgSignupDraft.organizationType),
+      {
+        organizationName: orgSignupDraft.organizationName,
+        organizationType: orgSignupDraft.organizationType,
+        registrationNumber: orgSignupDraft.registrationNumber,
+        operatingCounties: orgSignupDraft.operatingCounties,
+        contactName: orgSignupDraft.contactName,
+        designation: orgSignupDraft.designation,
+        certificateFileName,
+        verificationDocumentStatus: certificateFileName
+          ? 'submitted'
+          : 'not_submitted',
+      },
+    )
     transitionTo('org-pending')
   }
 
@@ -90,7 +137,10 @@ export function Auth() {
         return (
           <OrgSignupStep1
             orgType={orgType}
-            onNext={() => transitionTo('org-signup-step2')}
+            onNext={(draft) => {
+              setOrgSignupDraft(draft)
+              transitionTo('org-signup-step2', draft.organizationType)
+            }}
             onLoginClick={() => transitionTo('login')}
             onGoogleSignup={handlePartnerGoogleSignup}
           />
@@ -98,7 +148,7 @@ export function Auth() {
       case 'org-signup-step2':
         return (
           <OrgSignupStep2
-            onSubmit={() => transitionTo('org-pending')}
+            onSubmit={handlePartnerSubmit}
             onBack={() => transitionTo('org-signup-step1')}
           />
         )
@@ -128,6 +178,16 @@ export function Auth() {
       {/* Main Content Area */}
       <main className="flex-1 flex items-center justify-center pb-12">
         <div ref={containerRef} className="w-full">
+          {authError === 'auth-required' && (
+            <div className="mx-auto mb-4 max-w-md rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              Please log in before opening the household dashboard.
+            </div>
+          )}
+          {authError === 'unauthorized' && (
+            <div className="mx-auto mb-4 max-w-md rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              That page is not available for this account type.
+            </div>
+          )}
           {renderContent()}
         </div>
       </main>

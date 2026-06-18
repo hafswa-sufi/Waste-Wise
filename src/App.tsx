@@ -7,6 +7,7 @@ import { HouseholdProfile } from '../components/pages/HouseholdProfile'
 import { Auth } from '../components/pages/Auth'
 import { Recycling } from '../components/pages/Recycling'
 import { AuthProvider } from './context/AuthContext'
+import { RequireAuth } from './components/RequireAuth'
 
 function App() {
   return (
@@ -16,12 +17,30 @@ function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/household" element={<Household />} />
+          <Route
+            path="/household"
+            element={
+              <RequireAuth allowedRoles={['Household']}>
+                <Household />
+              </RequireAuth>
+            }
+          />
           <Route
             path="/household/notifications"
-            element={<HouseholdNotifications />}
+            element={
+              <RequireAuth allowedRoles={['Household']}>
+                <HouseholdNotifications />
+              </RequireAuth>
+            }
           />
-          <Route path="/household/profile" element={<HouseholdProfile />} />
+          <Route
+            path="/household/profile"
+            element={
+              <RequireAuth allowedRoles={['Household']}>
+                <HouseholdProfile />
+              </RequireAuth>
+            }
+          />
           <Route path="/recycling" element={<Recycling />} />
         </Routes>
       </BrowserRouter>

@@ -2,11 +2,21 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import { authErrorMessage } from './authErrors'
+export interface OrgSignupDraft {
+  organizationName: string
+  organizationType: 'NGO' | 'Recycling Company'
+  registrationNumber: string
+  operatingCounties: string
+  contactName: string
+  designation: string
+  workEmail: string
+  password: string
+}
 interface OrgSignupStep1Props {
   orgType: 'NGO' | 'Recycling Company'
-  onNext: () => void
+  onNext: (draft: OrgSignupDraft) => void
   onLoginClick: () => void
-  onGoogleSignup: () => Promise<void>
+  onGoogleSignup: (draft: Omit<OrgSignupDraft, 'password'>) => Promise<void>
 }
 export function OrgSignupStep1({
   orgType,
@@ -26,14 +36,42 @@ export function OrgSignupStep1({
       setError('Please fill in all required registration details.')
       return
     }
-    onNext()
+    const formData = new FormData(form)
+    onNext({
+      organizationName: String(formData.get('organizationName') || '').trim(),
+      organizationType: String(formData.get('organizationType') || orgType) as
+        | 'NGO'
+        | 'Recycling Company',
+      registrationNumber: String(formData.get('registrationNumber') || '').trim(),
+      operatingCounties: String(formData.get('operatingCounties') || '').trim(),
+      contactName: String(formData.get('contactName') || '').trim(),
+      designation: String(formData.get('designation') || '').trim(),
+      workEmail: String(formData.get('workEmail') || '').trim(),
+      password: String(formData.get('password') || ''),
+    })
   }
 
-  const handleGoogleSignup = async () => {
+  const handleGoogleSignup = async (event: React.MouseEvent<HTMLButtonElement>) => {
     setError(null)
+    const form = event.currentTarget.form
+    if (!form || !form.checkValidity()) {
+      setError('Please fill in the organisation details before continuing with Google.')
+      return
+    }
+    const formData = new FormData(form)
     setIsLoading(true)
     try {
-      await onGoogleSignup()
+      await onGoogleSignup({
+        organizationName: String(formData.get('organizationName') || '').trim(),
+        organizationType: String(formData.get('organizationType') || orgType) as
+          | 'NGO'
+          | 'Recycling Company',
+        registrationNumber: String(formData.get('registrationNumber') || '').trim(),
+        operatingCounties: String(formData.get('operatingCounties') || '').trim(),
+        contactName: String(formData.get('contactName') || '').trim(),
+        designation: String(formData.get('designation') || '').trim(),
+        workEmail: String(formData.get('workEmail') || '').trim(),
+      })
     } catch (err) {
       setError(authErrorMessage(err, 'Google sign up failed. Try again.'))
     } finally {
@@ -66,6 +104,7 @@ export function OrgSignupStep1({
                 Organisation Name
               </label>
               <input
+                name="organizationName"
                 type="text"
                 required
                 className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
@@ -77,6 +116,7 @@ export function OrgSignupStep1({
                 Organisation Type
               </label>
               <select
+                name="organizationType"
                 defaultValue={orgType}
                 required
                 className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all appearance-none"
@@ -93,6 +133,7 @@ export function OrgSignupStep1({
                 Official Registration Number
               </label>
               <input
+                name="registrationNumber"
                 type="text"
                 required
                 className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
@@ -104,6 +145,7 @@ export function OrgSignupStep1({
                 Operating Counties
               </label>
               <input
+                name="operatingCounties"
                 type="text"
                 required
                 className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
@@ -122,6 +164,7 @@ export function OrgSignupStep1({
                   Full Name
                 </label>
                 <input
+                  name="contactName"
                   type="text"
                   required
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
@@ -133,6 +176,7 @@ export function OrgSignupStep1({
                   Designation
                 </label>
                 <input
+                  name="designation"
                   type="text"
                   required
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
@@ -146,6 +190,7 @@ export function OrgSignupStep1({
                   Work Email
                 </label>
                 <input
+                  name="workEmail"
                   type="email"
                   required
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
@@ -158,6 +203,7 @@ export function OrgSignupStep1({
                 </label>
                 <div className="relative">
                   <input
+                    name="password"
                     type={showPassword ? 'text' : 'password'}
                     required
                     className="w-full px-4 py-2.5 pr-11 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"

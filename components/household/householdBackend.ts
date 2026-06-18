@@ -375,15 +375,6 @@ function createLocalId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-function readLocalItems<T>(key: string): T[] {
-  try {
-    const value = window.localStorage.getItem(key)
-    return value ? (JSON.parse(value) as T[]) : []
-  } catch {
-    return []
-  }
-}
-
 function writeLocalItems<T>(key: string, value: T[]) {
   window.localStorage.setItem(key, JSON.stringify(value))
 }
@@ -410,8 +401,9 @@ export function useHouseholdBackend() {
 
   useEffect(() => {
     if (!currentUser) {
-      setPantryItems(readLocalItems<PantryItem>(localPantryKey))
-      setActions(readLocalItems<ActionItem>(localActionsKey))
+      setPantryItems([])
+      setActions([])
+      setError('Please log in to access household data.')
       setLoading(false)
       return
     }
@@ -445,8 +437,10 @@ export function useHouseholdBackend() {
       },
       (err) => {
         if (isPermissionError(err)) {
-          setPantryItems(readLocalItems<PantryItem>(localPantryKey))
-          setError(null)
+          setPantryItems([])
+          setError(
+            'Firestore blocked pantry access. Check rules for users/{uid}/pantryItems.',
+          )
         } else {
           setError(err.message)
         }
@@ -466,8 +460,10 @@ export function useHouseholdBackend() {
       },
       (err) => {
         if (isPermissionError(err)) {
-          setActions(readLocalItems<ActionItem>(localActionsKey))
-          setError(null)
+          setActions([])
+          setError(
+            'Firestore blocked household actions. Check rules for users/{uid}/householdActions.',
+          )
         } else {
           setError(err.message)
         }
@@ -556,17 +552,12 @@ export function useHouseholdBackend() {
         updatedAt: serverTimestamp(),
       })
     } catch (err) {
-      if (!isPermissionError(err)) throw err
-      const nextItem: PantryItem = {
-        id: createLocalId('pantry'),
-        ...input,
-        status: statusForExpiry(input.expiryDate),
+      if (isPermissionError(err)) {
+        throw new Error(
+          'Firestore blocked adding this pantry item. Check users/{uid}/pantryItems rules.',
+        )
       }
-      setPantryItems((current) => {
-        const next = [nextItem, ...current]
-        writeLocalItems(localPantryKey, next)
-        return next
-      })
+      throw err
     }
   }
 
@@ -597,20 +588,12 @@ export function useHouseholdBackend() {
         updatedAt: serverTimestamp(),
       })
     } catch (err) {
-      if (!isPermissionError(err)) throw err
-      setPantryItems((current) => {
-        const next = current.map((item) => {
-          if (item.id !== itemId) return item
-          const expiryDate = input.expiryDate ?? item.expiryDate
-          return {
-            ...item,
-            ...input,
-            status: statusForExpiry(expiryDate),
-          }
-        })
-        writeLocalItems(localPantryKey, next)
-        return next
-      })
+      if (isPermissionError(err)) {
+        throw new Error(
+          'Firestore blocked updating this pantry item. Check users/{uid}/pantryItems rules.',
+        )
+      }
+      throw err
     }
   }
 
@@ -667,21 +650,12 @@ export function useHouseholdBackend() {
       })
       await deleteDoc(doc(db, 'users', currentUser.uid, 'pantryItems', item.id))
     } catch (err) {
-      if (!isPermissionError(err)) throw err
-      recordLocalAction(
-        {
-          type: 'consumed',
-          pantryItemId: item.id,
-          name: item.name,
-          quantity: item.quantity,
-        },
-        'Collected',
-      )
-      setPantryItems((current) => {
-        const next = current.filter((pantryItem) => pantryItem.id !== item.id)
-        writeLocalItems(localPantryKey, next)
-        return next
-      })
+      if (isPermissionError(err)) {
+        throw new Error(
+          'Firestore blocked recording consumption. Check users/{uid}/householdActions rules.',
+        )
+      }
+      throw err
     }
   }
 
@@ -737,27 +711,12 @@ export function useHouseholdBackend() {
         })
       }
     } catch (err) {
-      if (!isPermissionError(err)) throw err
-      recordLocalAction(
-        {
-          type: 'consumed',
-          pantryItemId: item.id,
-          name: item.name,
-          quantity: consumedQuantity,
-        },
-        'Collected',
-      )
-      setPantryItems((current) => {
-        const next = remaining.isFinished
-          ? current.filter((pantryItem) => pantryItem.id !== item.id)
-          : current.map((pantryItem) =>
-              pantryItem.id === item.id
-                ? { ...pantryItem, quantity: remaining.quantity }
-                : pantryItem,
-            )
-        writeLocalItems(localPantryKey, next)
-        return next
-      })
+      if (isPermissionError(err)) {
+        throw new Error(
+          'Firestore blocked recording consumption. Check users/{uid}/householdActions rules.',
+        )
+      }
+      throw err
     }
   }
 
@@ -798,15 +757,12 @@ export function useHouseholdBackend() {
         updatedAt: serverTimestamp(),
       })
     } catch (err) {
-      if (!isPermissionError(err)) throw err
-      recordLocalAction(
-        {
-          ...input,
-          partner: input.partner || pickPartner(input.type),
-          pickupDate: input.pickupDate || defaultPickupDate(),
-        },
-        'Pending',
-      )
+      if (isPermissionError(err)) {
+        throw new Error(
+          'Firestore blocked this request. Check users/{uid}/householdActions rules.',
+        )
+      }
+      throw err
     }
   }
 

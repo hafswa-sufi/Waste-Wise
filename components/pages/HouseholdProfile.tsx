@@ -79,6 +79,7 @@ export function HouseholdProfile() {
   }
 
   const handleLogout = async () => {
+    window.sessionStorage.setItem('wastewise.justLoggedOut', 'true')
     await logout()
     navigate('/auth', { replace: true, state: { authState: 'login' } })
   }

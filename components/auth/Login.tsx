@@ -171,11 +171,12 @@ export function Login({ onSignupClick }: LoginProps) {
               <label className="block text-sm font-bold text-gray-700">
                 Password
               </label>
-              <button
+             <button
                 type="button"
                 onClick={handlePasswordReset}
                 className="text-sm font-bold text-wastewise-green hover:underline"
               >
+                
                 Forgot Password?
               </button>
             </div>

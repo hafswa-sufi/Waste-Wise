@@ -14,6 +14,7 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [location, setLocation] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -22,6 +23,7 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
   const validate = () => {
     if (!fullName.trim()) return 'Full name is required.'
     if (!email.trim()) return 'Email address is required.'
+    if (!location.trim()) return 'County or location is required.'
     if (!password) return 'Password is required.'
     if (password.length < 6) return 'Password should be at least 6 characters.'
     if (!confirmPassword) return 'Please confirm your password.'
@@ -41,7 +43,9 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
 
     setIsLoading(true)
     try {
-      await signUp(fullName, email, password, 'Household')
+      await signUp(fullName, email, password, 'Household', {
+        location: location.trim(),
+      })
       navigate('/household')
     } catch (err) {
       setError(authErrorMessage(err, 'Failed to create account. Try again.'))
@@ -137,7 +141,11 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
             <label className="block text-sm font-bold text-gray-700 mb-1.5">
               County / Location
             </label>
-            <select className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all appearance-none">
+            <select
+              value={location}
+              onChange={(event) => setLocation(event.target.value)}
+              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all appearance-none"
+            >
               <option value="">Select your county</option>
               <option value="Nairobi">Nairobi</option>
               <option value="Mombasa">Mombasa</option>

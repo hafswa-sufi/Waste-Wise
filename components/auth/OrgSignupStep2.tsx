@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, UploadCloud, Info } from 'lucide-react'
 
@@ -10,13 +10,15 @@ const InfoIcon = Info as unknown as React.ComponentType<
 >
 
 interface OrgSignupStep2Props {
-  onSubmit: () => void
+  onSubmit: (certificateFileName: string) => void
   onBack: () => void
 }
 export function OrgSignupStep2({ onSubmit, onBack }: OrgSignupStep2Props) {
+  const [certificateFileName, setCertificateFileName] = useState('')
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    onSubmit()
+    onSubmit(certificateFileName)
   }
   return (
     <div className="w-full max-w-2xl mx-auto px-4 py-12">
@@ -43,7 +45,7 @@ export function OrgSignupStep2({ onSubmit, onBack }: OrgSignupStep2Props) {
             <label className="block text-sm font-bold text-gray-900 mb-3">
               Certificate of Registration
             </label>
-            <div className="border-2 border-dashed border-gray-300 rounded-2xl p-10 text-center hover:bg-gray-50 hover:border-wastewise-green transition-colors cursor-pointer group">
+            <label className="block border-2 border-dashed border-gray-300 rounded-2xl p-10 text-center hover:bg-gray-50 hover:border-wastewise-green transition-colors cursor-pointer group">
               <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-green-100 transition-colors">
                 <UploadCloudIcon className="w-8 h-8 text-wastewise-green" />
               </div>
@@ -53,7 +55,20 @@ export function OrgSignupStep2({ onSubmit, onBack }: OrgSignupStep2Props) {
               <p className="text-gray-500 text-sm">
                 PDF, JPG, or PNG (max. 5MB)
               </p>
-            </div>
+              <input
+                type="file"
+                accept=".pdf,image/png,image/jpeg"
+                className="sr-only"
+                onChange={(event) =>
+                  setCertificateFileName(event.target.files?.[0]?.name ?? '')
+                }
+              />
+            </label>
+            {certificateFileName && (
+              <p className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-sm font-semibold text-green-700">
+                Selected: {certificateFileName}
+              </p>
+            )}
           </div>
 
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-start gap-3 mb-8">

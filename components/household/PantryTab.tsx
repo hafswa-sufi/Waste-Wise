@@ -256,12 +256,19 @@ export function PantryTab() {
     }
     setFormError(null)
 
-    if (formMode === 'edit' && editingItemId) {
-      await updatePantryItem(editingItemId, submittedForm)
-      showNotice('Pantry item updated.')
-    } else {
-      await addPantryItem(submittedForm)
-      showNotice('Pantry item added.')
+    try {
+      if (formMode === 'edit' && editingItemId) {
+        await updatePantryItem(editingItemId, submittedForm)
+        showNotice('Pantry item updated.')
+      } else {
+        await addPantryItem(submittedForm)
+        showNotice('Pantry item added.')
+      }
+    } catch (err) {
+      setFormError(
+        err instanceof Error ? err.message : 'Could not save this pantry item.',
+      )
+      return
     }
     setFormMode(null)
     setEditingItemId(null)
@@ -271,17 +278,23 @@ export function PantryTab() {
     item: PantryItem,
     type: 'donation' | 'disposal',
   ) => {
-    await flagAction({
-      type,
-      pantryItemId: item.id,
-      name: item.name,
-      quantity: item.quantity,
-    })
-    showNotice(
-      type === 'donation'
-        ? 'Donation request created.'
-        : 'Disposal request created.',
-    )
+    try {
+      await flagAction({
+        type,
+        pantryItemId: item.id,
+        name: item.name,
+        quantity: item.quantity,
+      })
+      showNotice(
+        type === 'donation'
+          ? 'Donation request created.'
+          : 'Disposal request created.',
+      )
+    } catch (err) {
+      showNotice(
+        err instanceof Error ? err.message : 'Could not create that request.',
+      )
+    }
   }
 
   const handleConsumed = async (item: PantryItem) => {

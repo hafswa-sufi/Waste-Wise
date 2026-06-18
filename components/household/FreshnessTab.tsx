@@ -146,6 +146,8 @@ const processedFoodKeywords = [
   'sauce',
   'jam',
 ]
+const proteinKeywords = ['chicken', 'beef', 'meat', 'fish', 'pork', 'lamb']
+const fruitKeywords = ['mango', 'banana', 'apple', 'orange', 'avocado']
 
 function includesAny(value: string, words: string[]) {
   const normalized = value.toLowerCase()
@@ -162,9 +164,16 @@ function validateFreshnessInput(name: string) {
   return null
 }
 
+function inferCustomCategory(name: string, selectedCategory: PantryCategory | 'All') {
+  if (selectedCategory !== 'All') return selectedCategory
+  if (includesAny(name, proteinKeywords)) return 'Proteins'
+  if (includesAny(name, fruitKeywords)) return 'Fruits'
+  return 'Vegetables'
+}
+
 export function FreshnessTab() {
   const { addPantryItem } = useHouseholdBackend()
-  const [produce, setProduce] = useState(produceOptions[0].value)
+  const [produce, setProduce] = useState('')
   const [produceSearch, setProduceSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<
     PantryCategory | 'All'
@@ -175,7 +184,7 @@ export function FreshnessTab() {
   const [purchaseDate, setPurchaseDate] = useState(
     toDateInputValue(new Date()),
   )
-  const [submitted, setSubmitted] = useState(true)
+  const [submitted, setSubmitted] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const resultRef = useRef<HTMLElement>(null)
@@ -195,10 +204,11 @@ export function FreshnessTab() {
 
   const selectedKnownProduce =
     produceOptions.find((option) => option.value === produce) ??
-    filteredProduceOptions[0] ??
-    produceOptions[0]
-  const customCategory =
-    categoryFilter === 'All' ? 'Vegetables' : categoryFilter
+    filteredProduceOptions.find((option) => option.value === produce)
+  const customCategory = inferCustomCategory(
+    customProduceName.trim(),
+    categoryFilter,
+  )
   const selectedProduce = customProduceName.trim()
     ? {
         value: 'custom',
@@ -207,9 +217,9 @@ export function FreshnessTab() {
         shelfLife: categoryShelfLife[customCategory],
       }
     : selectedKnownProduce
-  const estimatedDays = selectedProduce.shelfLife[storage]
-  const expiryDate = addDays(purchaseDate, estimatedDays)
-  const remainingDays = daysUntil(expiryDate)
+  const estimatedDays = selectedProduce?.shelfLife[storage] ?? 0
+  const expiryDate = selectedProduce ? addDays(purchaseDate, estimatedDays) : ''
+  const remainingDays = selectedProduce ? daysUntil(expiryDate) : 0
   const status =
     remainingDays < 0
       ? 'Spoiled'
@@ -232,6 +242,11 @@ export function FreshnessTab() {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (!selectedProduce) {
+      setErrorMessage('Choose a food from the list or type its name before estimating.')
+      setSubmitted(false)
+      return
+    }
     const validationMessage = validateFreshnessInput(selectedProduce.label)
     if (validationMessage) {
       setErrorMessage(validationMessage)
@@ -249,28 +264,42 @@ export function FreshnessTab() {
       { opacity: 0, y: 14 },
       { opacity: 1, y: 0, duration: 0.35, ease: 'power2.out' },
     )
-  }, [submitted, selectedProduce.label, storage, purchaseDate])
+  }, [submitted, selectedProduce?.label, storage, purchaseDate])
 
   const handleSaveToPantry = async () => {
+    if (!selectedProduce) {
+      setErrorMessage('Choose a food from the list or type its name before adding it to pantry.')
+      setSubmitted(false)
+      return
+    }
     const validationMessage = validateFreshnessInput(selectedProduce.label)
     if (validationMessage) {
       setErrorMessage(validationMessage)
       setSubmitted(false)
       return
     }
-    await addPantryItem({
-      name: selectedProduce.label,
-      category: selectedProduce.category,
-      quantity,
-      storageType: storage,
-      purchaseDate,
-      expiryDate,
-      itemKind: 'fresh',
-    })
+    try {
+      await addPantryItem({
+        name: selectedProduce.label,
+        category: selectedProduce.category,
+        quantity,
+        storageType: storage,
+        purchaseDate,
+        expiryDate,
+        itemKind: 'fresh',
+      })
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Could not add this item to pantry.',
+      )
+      return
+    }
     showNotice(`${selectedProduce.label} added to pantry.`)
     setSubmitted(false)
     setErrorMessage(null)
     setCustomProduceName('')
+    setProduceSearch('')
+    setProduce('')
     setQuantity('1 item')
   }
 
@@ -286,10 +315,16 @@ export function FreshnessTab() {
             Estimate Freshness
           </h1>
           <p className="text-gray-500 mt-1">
-            For fresh produce without printed expiry dates.
+            Choose a fresh food, tell us where it is stored, then add the
+            estimate to your pantry.
           </p>
         </div>
       </div>
+      {notice && (
+        <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-800">
+          {notice}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">
         <form
@@ -298,28 +333,35 @@ export function FreshnessTab() {
         >
           <label className="block">
             <span className="text-sm font-bold text-gray-700">
-              Search produce
+              Find a fresh food
             </span>
             <div className="mt-2 flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-2 focus-within:border-wastewise-green focus-within:ring-2 focus-within:ring-wastewise-green/20">
               <Search className="w-4 h-4 text-gray-400" />
               <input
                 value={produceSearch}
-                onChange={(event) => setProduceSearch(event.target.value)}
+                onChange={(event) => {
+                  setProduceSearch(event.target.value)
+                  setProduce('')
+                }}
                 className="w-full text-sm outline-none"
-                placeholder="Search sukuma, tomatoes, mangoes..."
+                placeholder="Search tomatoes, mangoes, chicken..."
               />
             </div>
+            <p className="mt-2 text-xs font-medium text-gray-500">
+              Search, pick from the list, or type the food name below.
+            </p>
           </label>
 
           <label className="block">
             <span className="text-sm font-bold text-gray-700">
-              Produce category
+              Food group
             </span>
             <select
               value={categoryFilter}
-              onChange={(event) =>
+              onChange={(event) => {
                 setCategoryFilter(event.target.value as PantryCategory | 'All')
-              }
+                setProduce('')
+              }}
               className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold focus:border-wastewise-green focus:outline-none focus:ring-2 focus:ring-wastewise-green/20"
             >
               {categoryOptions.map((category) => (
@@ -330,16 +372,17 @@ export function FreshnessTab() {
 
           <label className="block">
             <span className="text-sm font-bold text-gray-700">
-              Produce type
+              Choose from common foods
             </span>
             <select
-              value={selectedKnownProduce.value}
+              value={produce}
               onChange={(event) => {
                 setProduce(event.target.value)
                 setCustomProduceName('')
               }}
               className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold focus:border-wastewise-green focus:outline-none focus:ring-2 focus:ring-wastewise-green/20"
             >
+              <option value="">Select a food</option>
               {filteredProduceOptions.length > 0 ? (
                 filteredProduceOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -347,7 +390,7 @@ export function FreshnessTab() {
                   </option>
                 ))
               ) : (
-                <option value={selectedKnownProduce.value}>
+                <option value="" disabled>
                   No matching produce
                 </option>
               )}
@@ -356,13 +399,16 @@ export function FreshnessTab() {
 
           <label className="block">
             <span className="text-sm font-bold text-gray-700">
-              Not listed?
+              Or type the food name
             </span>
             <input
               value={customProduceName}
-              onChange={(event) => setCustomProduceName(event.target.value)}
+              onChange={(event) => {
+                setCustomProduceName(event.target.value)
+                setProduce('')
+              }}
               className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-wastewise-green focus:outline-none focus:ring-2 focus:ring-wastewise-green/20"
-              placeholder="Type produce name"
+              placeholder="Example: managu, beef, fish"
             />
           </label>
 
@@ -428,7 +474,7 @@ export function FreshnessTab() {
           ref={resultRef}
           className="bg-white border border-gray-200 rounded-xl p-5 sm:p-6"
         >
-          {submitted && (
+          {submitted && selectedProduce && (
             <>
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                 <div>
@@ -498,12 +544,6 @@ export function FreshnessTab() {
                 </div>
               </div>
 
-              {notice && (
-                <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-800">
-                  {notice}
-                </div>
-              )}
-
               <div className="mt-6 flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={handleSaveToPantry}
@@ -516,11 +556,15 @@ export function FreshnessTab() {
             </>
           )}
           {!submitted && (
-            <div className="flex min-h-72 items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-center">
-              <div>
-                <Sparkles className="mx-auto h-8 w-8 text-gray-300" />
-                <p className="mt-3 text-sm font-semibold text-gray-500">
-                  Estimate a fresh produce item to see its result here.
+            <div className="flex min-h-72 items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 px-6 text-center">
+              <div className="max-w-sm">
+                <Sparkles className="mx-auto h-8 w-8 text-wastewise-green/50" />
+                <p className="mt-3 text-base font-extrabold text-gray-800">
+                  No estimate yet
+                </p>
+                <p className="mt-2 text-sm font-medium text-gray-500">
+                  Choose a fresh food or type one in, enter the quantity and
+                  storage method, then press Estimate freshness.
                 </p>
               </div>
             </div>

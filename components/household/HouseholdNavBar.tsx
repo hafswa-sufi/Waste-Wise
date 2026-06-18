@@ -61,6 +61,7 @@ export function HouseholdNavbar({
   const notificationCount = notifications.filter((item) => !item.read).length
 
   const handleLogout = async () => {
+    window.sessionStorage.setItem('wastewise.justLoggedOut', 'true')
     await logout()
     navigate('/auth', { replace: true, state: { authState: 'login' } })
   }

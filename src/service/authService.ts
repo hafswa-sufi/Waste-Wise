@@ -20,7 +20,48 @@ export interface UserData {
   email: string
   role: UserRole
   approvalStatus: 'approved' | 'pending' | 'rejected'
+  location?: string
+  organizationName?: string
+  organizationType?: 'NGO' | 'Recycling Company'
+  registrationNumber?: string
+  operatingCounties?: string
+  contactName?: string
+  designation?: string
+  certificateFileName?: string
+  verificationDocumentStatus?: 'not_submitted' | 'submitted'
   createdAt: unknown
+}
+
+export interface SignupProfileData {
+  location?: string
+  organizationName?: string
+  organizationType?: 'NGO' | 'Recycling Company'
+  registrationNumber?: string
+  operatingCounties?: string
+  contactName?: string
+  designation?: string
+  certificateFileName?: string
+  verificationDocumentStatus?: 'not_submitted' | 'submitted'
+}
+
+function cleanProfileData(data: SignupProfileData = {}) {
+  return Object.fromEntries(
+    Object.entries(data).filter(
+      ([key, value]) =>
+        key.toLowerCase() !== 'password' &&
+        value !== undefined &&
+        value !== '',
+    ),
+  )
+}
+
+function authActionSettings(path = '/auth?mode=login') {
+  if (typeof window === 'undefined') return undefined
+
+  return {
+    url: `${window.location.origin}${path}`,
+    handleCodeInApp: false,
+  }
 }
 
 const requiresApproval = (role: UserRole) =>
@@ -47,6 +88,7 @@ export const signUp = async (
   email: string,
   password: string,
   role: UserRole,
+  profileData: SignupProfileData = {},
 ) => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password)
@@ -59,10 +101,11 @@ export const signUp = async (
       role,
       emailVerified: user.emailVerified,
       approvalStatus: requiresApproval(role) ? 'pending' : 'approved',
+      ...cleanProfileData(profileData),
       createdAt: serverTimestamp(),
     })
 
-    await sendEmailVerification(user)
+    await sendEmailVerification(user, authActionSettings())
 
     return user
   } catch (error) {
@@ -84,7 +127,10 @@ export const login = async (email: string, password: string) => {
   }
 }
 
-export const signInWithGoogle = async (roleForNewUser: UserRole) => {
+export const signInWithGoogle = async (
+  roleForNewUser: UserRole,
+  profileData: SignupProfileData = {},
+) => {
   try {
     const userCredential = await signInWithPopup(auth, googleProvider)
     const user = userCredential.user
@@ -99,6 +145,7 @@ export const signInWithGoogle = async (roleForNewUser: UserRole) => {
         role: roleForNewUser,
         emailVerified: user.emailVerified,
         approvalStatus: requiresApproval(roleForNewUser) ? 'pending' : 'approved',
+        ...cleanProfileData(profileData),
         createdAt: serverTimestamp(),
       })
     }
@@ -175,7 +222,7 @@ export const rejectPartner = async (userId: string) => {
 
 export const sendResetPasswordEmail = async (email: string) => {
   try {
-    await sendPasswordResetEmail(auth, email)
+    await sendPasswordResetEmail(auth, email, authActionSettings())
   } catch (error) {
     console.error('Password reset error:', error)
     throw error
@@ -186,7 +233,7 @@ export const resendVerificationEmail = async () => {
   try {
     const user = auth.currentUser
     if (!user) throw new Error('Please log in again to verify your email.')
-    await sendEmailVerification(user)
+    await sendEmailVerification(user, authActionSettings())
   } catch (error) {
     console.error('Email verification error:', error)
     throw error
