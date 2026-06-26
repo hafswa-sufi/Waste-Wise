@@ -196,6 +196,7 @@ export const approvePartner = async (userId: string) => {
       doc(db, 'users', userId),
       {
         approvalStatus: 'approved',
+        updatedAt: serverTimestamp(),
       },
       { merge: true },
     )
@@ -211,6 +212,7 @@ export const rejectPartner = async (userId: string) => {
       doc(db, 'users', userId),
       {
         approvalStatus: 'rejected',
+        updatedAt: serverTimestamp(),
       },
       { merge: true },
     )

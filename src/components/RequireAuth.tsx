@@ -49,6 +49,20 @@ export function RequireAuth({ children, allowedRoles }: RequireAuthProps) {
     )
   }
 
+  if (allowedRoles && !userData) {
+    return (
+      <Navigate
+        to="/auth?mode=login&error=unauthorized"
+        replace
+        state={{
+          from: location.pathname,
+          authState: 'login',
+          authError: 'unauthorized',
+        }}
+      />
+    )
+  }
+
   if (allowedRoles && userData?.role && !allowedRoles.includes(userData.role)) {
     return (
       <Navigate

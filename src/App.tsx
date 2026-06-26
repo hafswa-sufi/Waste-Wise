@@ -6,6 +6,7 @@ import { HouseholdNotifications } from '../components/pages/HouseholdNotificatio
 import { HouseholdProfile } from '../components/pages/HouseholdProfile'
 import { Auth } from '../components/pages/Auth'
 import { Recycling } from '../components/pages/Recycling'
+import { Admin } from '../components/pages/Admin'
 import { AuthProvider } from './context/AuthContext'
 import { RequireAuth } from './components/RequireAuth'
 
@@ -16,7 +17,14 @@ function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/auth" element={<Auth />} />
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route
+            path="/dashboard"
+            element={
+              <RequireAuth allowedRoles={['NGO']}>
+                <Dashboard />
+              </RequireAuth>
+            }
+          />
           <Route
             path="/household"
             element={
@@ -41,7 +49,22 @@ function App() {
               </RequireAuth>
             }
           />
-          <Route path="/recycling" element={<Recycling />} />
+          <Route
+            path="/recycling"
+            element={
+              <RequireAuth allowedRoles={['RecyclingFirm']}>
+                <Recycling />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <RequireAuth allowedRoles={['Admin']}>
+                <Admin />
+              </RequireAuth>
+            }
+          />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
