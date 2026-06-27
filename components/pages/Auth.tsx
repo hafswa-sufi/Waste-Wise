@@ -59,7 +59,7 @@ export function Auth() {
     transitionTo('org-pending')
   }
 
-  const handlePartnerSubmit = async (certificateFileName: string) => {
+  const handlePartnerSubmit = async (certificateFile: File | null) => {
     if (!orgSignupDraft) {
       transitionTo('org-signup-step1')
       return
@@ -76,11 +76,12 @@ export function Auth() {
         operatingCounties: orgSignupDraft.operatingCounties,
         contactName: orgSignupDraft.contactName,
         designation: orgSignupDraft.designation,
-        certificateFileName,
-        verificationDocumentStatus: certificateFileName
+        certificateFileName: certificateFile?.name,
+        verificationDocumentStatus: certificateFile
           ? 'submitted'
           : 'not_submitted',
       },
+      certificateFile,
     )
     transitionTo('org-pending')
   }

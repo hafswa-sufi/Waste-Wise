@@ -25,7 +25,7 @@ export type PantryCategory =
 
 export type StorageType = 'Fridge' | 'Counter' | 'Basket'
 export type PantryStatus = 'Fresh' | 'Expiring Soon' | 'Expired'
-export type ActionStatus = 'Pending' | 'Confirmed' | 'Collected'
+export type ActionStatus = 'Pending' | 'Confirmed' | 'Collected' | 'Cancelled'
 export type HouseholdActionType = 'donation' | 'disposal' | 'consumed'
 
 export interface PantryItem {
@@ -33,6 +33,8 @@ export interface PantryItem {
   name: string
   category: PantryCategory
   quantity: string
+  quantityValue?: number
+  quantityUnit?: string
   storageType: StorageType
   purchaseDate: string
   expiryDate: string
@@ -60,6 +62,8 @@ export interface ActionItem {
   pantryItemId?: string
   name: string
   quantity: string
+  quantityValue?: number
+  quantityUnit?: string
   partner: string
   pickupDate: string
   status: ActionStatus
@@ -167,6 +171,9 @@ function normalizePantryItem(id: string, data: DocumentData): PantryItem {
     name: asString(data.name, 'Unnamed item'),
     category: asString(data.category, 'Other') as PantryCategory,
     quantity: asString(data.quantity, '1 item'),
+    quantityValue:
+      typeof data.quantityValue === 'number' ? data.quantityValue : undefined,
+    quantityUnit: asString(data.quantityUnit) || undefined,
     storageType: asString(data.storageType, 'Counter') as StorageType,
     purchaseDate: asString(data.purchaseDate),
     expiryDate,
@@ -184,6 +191,9 @@ function normalizeActionItem(id: string, data: DocumentData): ActionItem {
     pantryItemId: asString(data.pantryItemId) || undefined,
     name: asString(data.name, 'Unnamed item'),
     quantity: asString(data.quantity, '1 item'),
+    quantityValue:
+      typeof data.quantityValue === 'number' ? data.quantityValue : undefined,
+    quantityUnit: asString(data.quantityUnit) || undefined,
     partner: asString(data.partner, 'Partner pending'),
     pickupDate: asString(data.pickupDate),
     status: asString(data.status, 'Pending') as ActionStatus,
@@ -203,6 +213,16 @@ function parseQuantity(value: string) {
   return {
     amount,
     unit: match[2].trim(),
+  }
+}
+
+function quantityFields(value: string) {
+  const parsed = parseQuantity(value)
+  if (!parsed) return {}
+
+  return {
+    quantityValue: parsed.amount,
+    quantityUnit: parsed.unit || 'item',
   }
 }
 
@@ -548,6 +568,8 @@ export function useHouseholdBackend() {
     try {
       await addDoc(householdCollection(currentUser.uid, 'pantryItems'), {
         ...input,
+        ...quantityFields(input.quantity),
+        expirySource: input.itemKind === 'fresh' ? 'freshness-estimator' : 'manual',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
@@ -583,8 +605,12 @@ export function useHouseholdBackend() {
     }
 
     try {
+      const nextQuantityFields = input.quantity
+        ? quantityFields(input.quantity)
+        : {}
       await updateDoc(doc(db, 'users', currentUser.uid, 'pantryItems', itemId), {
         ...input,
+        ...nextQuantityFields,
         updatedAt: serverTimestamp(),
       })
     } catch (err) {
@@ -641,6 +667,7 @@ export function useHouseholdBackend() {
         pantryItemId: item.id,
         name: item.name,
         quantity: item.quantity,
+        ...quantityFields(item.quantity),
         partner: 'Household',
         pickupDate: toDateInputValue(new Date()),
         status: 'Collected',
@@ -695,6 +722,7 @@ export function useHouseholdBackend() {
         pantryItemId: item.id,
         name: item.name,
         quantity: consumedQuantity,
+        ...quantityFields(consumedQuantity),
         partner: 'Household',
         pickupDate: toDateInputValue(new Date()),
         status: 'Collected',
@@ -707,6 +735,7 @@ export function useHouseholdBackend() {
       } else {
         await updateDoc(doc(db, 'users', currentUser.uid, 'pantryItems', item.id), {
           quantity: remaining.quantity,
+          ...quantityFields(remaining.quantity),
           updatedAt: serverTimestamp(),
         })
       }
@@ -725,7 +754,9 @@ export function useHouseholdBackend() {
       input.pantryItemId &&
       actions.some(
         (item) =>
-          item.type === input.type && item.pantryItemId === input.pantryItemId,
+          item.type === input.type &&
+          item.pantryItemId === input.pantryItemId &&
+          item.status !== 'Cancelled',
       )
     ) {
       return
@@ -749,7 +780,9 @@ export function useHouseholdBackend() {
         pantryItemId: input.pantryItemId ?? null,
         name: input.name,
         quantity: input.quantity,
-        partner: input.partner || pickPartner(input.type),
+        ...quantityFields(input.quantity),
+        partner: input.partner || 'Partner pending',
+        partnerUserId: null,
         pickupDate: input.pickupDate || defaultPickupDate(),
         status: 'Pending',
         notificationRead: false,
@@ -815,6 +848,7 @@ export function useHouseholdBackend() {
           name: action.name,
           category: 'Other',
           quantity: action.quantity,
+          ...quantityFields(action.quantity),
           storageType: 'Counter',
           purchaseDate: toDateInputValue(new Date()),
           expiryDate: defaultPickupDate(),
@@ -831,8 +865,12 @@ export function useHouseholdBackend() {
     }
 
     try {
-      await deleteDoc(
+      await updateDoc(
         doc(db, 'users', currentUser.uid, 'householdActions', action.id),
+        {
+          status: 'Cancelled',
+          updatedAt: serverTimestamp(),
+        },
       )
       if (!alreadyInPantry) {
         await addDoc(householdCollection(currentUser.uid, 'pantryItems'), {
@@ -914,6 +952,8 @@ export function useHouseholdBackend() {
         ...pantrySamples.map((item) =>
           addDoc(householdCollection(currentUser.uid, 'pantryItems'), {
             ...item,
+            ...quantityFields(item.quantity),
+            expirySource: item.itemKind === 'fresh' ? 'freshness-estimator' : 'manual',
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           }),
@@ -921,6 +961,7 @@ export function useHouseholdBackend() {
         ...actionSamples.map((item) =>
           addDoc(householdCollection(currentUser.uid, 'householdActions'), {
             ...item,
+            ...quantityFields(item.quantity),
             pantryItemId: item.pantryItemId ?? null,
             status: 'Pending',
             notificationRead: false,

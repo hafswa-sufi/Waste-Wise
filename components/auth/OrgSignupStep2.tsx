@@ -10,15 +10,32 @@ const InfoIcon = Info as unknown as React.ComponentType<
 >
 
 interface OrgSignupStep2Props {
-  onSubmit: (certificateFileName: string) => void
+  onSubmit: (certificateFile: File | null) => Promise<void>
   onBack: () => void
 }
 export function OrgSignupStep2({ onSubmit, onBack }: OrgSignupStep2Props) {
-  const [certificateFileName, setCertificateFileName] = useState('')
+  const [certificateFile, setCertificateFile] = useState<File | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    onSubmit(certificateFileName)
+    setError(null)
+
+    if (certificateFile && certificateFile.size > 5 * 1024 * 1024) {
+      setError('The certificate file must be 5MB or smaller.')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      await onSubmit(certificateFile)
+    } catch (submitError) {
+      console.error('Partner document upload failed:', submitError)
+      setError('Could not submit your registration. Try again.')
+    } finally {
+      setSubmitting(false)
+    }
   }
   return (
     <div className="w-full max-w-2xl mx-auto px-4 py-12">
@@ -59,14 +76,20 @@ export function OrgSignupStep2({ onSubmit, onBack }: OrgSignupStep2Props) {
                 type="file"
                 accept=".pdf,image/png,image/jpeg"
                 className="sr-only"
-                onChange={(event) =>
-                  setCertificateFileName(event.target.files?.[0]?.name ?? '')
-                }
+                onChange={(event) => {
+                  setError(null)
+                  setCertificateFile(event.target.files?.[0] ?? null)
+                }}
               />
             </label>
-            {certificateFileName && (
+            {certificateFile && (
               <p className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-sm font-semibold text-green-700">
-                Selected: {certificateFileName}
+                Selected: {certificateFile.name}
+              </p>
+            )}
+            {error && (
+              <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                {error}
               </p>
             )}
           </div>
@@ -90,9 +113,10 @@ export function OrgSignupStep2({ onSubmit, onBack }: OrgSignupStep2Props) {
             </button>
             <button
               type="submit"
+              disabled={submitting}
               className="px-8 py-3.5 bg-wastewise-green text-white rounded-xl font-bold text-lg hover:bg-green-800 transition-colors shadow-sm"
             >
-              Submit for Review
+              {submitting ? 'Submitting...' : 'Submit for Review'}
             </button>
           </div>
         </form>

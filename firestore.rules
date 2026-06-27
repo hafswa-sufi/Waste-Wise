@@ -24,6 +24,21 @@ service cloud.firestore {
       return role in ['NGO', 'RecyclingFirm'];
     }
 
+    function isApprovedPartnerFor(actionType) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && (
+          (
+            actionType == 'donation'
+            && userDoc(request.auth.uid).data.role == 'NGO'
+          ) || (
+            actionType == 'disposal'
+            && userDoc(request.auth.uid).data.role == 'RecyclingFirm'
+          )
+        )
+        && userDoc(request.auth.uid).data.approvalStatus == 'approved';
+    }
+
     function isValidSignupRole(role) {
       return role in ['Household', 'NGO', 'RecyclingFirm'];
     }
@@ -52,6 +67,8 @@ service cloud.firestore {
           'contactName',
           'designation',
           'certificateFileName',
+          'certificateFilePath',
+          'certificateFileUrl',
           'verificationDocumentStatus',
           'updatedAt'
         ]);
@@ -63,6 +80,25 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['approvalStatus', 'updatedAt'])
         && request.resource.data.approvalStatus in ['approved', 'rejected'];
+    }
+
+    function partnerActionUpdateOnly() {
+      return isApprovedPartnerFor(resource.data.type)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly([
+            'partner',
+            'partnerUserId',
+            'status',
+            'confirmedAt',
+            'collectedAt',
+            'updatedAt'
+          ])
+        && request.resource.data.partnerUserId == request.auth.uid
+        && request.resource.data.status in ['Confirmed', 'Collected']
+        && (
+          !('partnerUserId' in resource.data)
+          || resource.data.partnerUserId == request.auth.uid
+        );
     }
 
     match /users/{userId} {
@@ -105,6 +141,17 @@ service cloud.firestore {
         && resource.data.userId == request.auth.uid;
       allow create: if signedIn()
         && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /{path=**}/householdActions/{actionId} {
+      allow read: if isAdmin() || isApprovedPartnerFor(resource.data.type);
+      allow update: if partnerActionUpdateOnly();
+
+      match /statusHistory/{historyId} {
+        allow read: if signedIn();
+        allow create: if isApprovedPartnerFor(get(/databases/$(database)/documents/$(path)/householdActions/$(actionId)).data.type)
+          && request.resource.data.changedByUserId == request.auth.uid;
+      }
     }
 
     match /orders/{id} {

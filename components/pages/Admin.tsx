@@ -7,6 +7,7 @@ import {
   type Timestamp,
 } from 'firebase/firestore'
 import {
+  BarChart3,
   Building2,
   CheckCircle2,
   Clock3,
@@ -16,9 +17,12 @@ import {
   Mail,
   MapPin,
   RefreshCw,
+  Recycle,
+  Scale,
   ShieldCheck,
   XCircle,
 } from 'lucide-react'
+import { collectionGroup } from 'firebase/firestore'
 import { useNavigate } from 'react-router-dom'
 import { db } from '../../src/firebase/firebase'
 import {
@@ -34,6 +38,12 @@ type PartnerStatus = 'all' | 'pending' | 'approved' | 'rejected'
 interface PartnerProfile extends UserData {
   updatedAt?: Timestamp
   createdAt: Timestamp
+}
+
+interface AdminActionReport {
+  type: 'donation' | 'disposal' | 'consumed'
+  status: string
+  quantity: string
 }
 
 const statusStyles = {
@@ -59,6 +69,7 @@ export function Admin() {
   const [loading, setLoading] = useState(true)
   const [workingUserId, setWorkingUserId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [reports, setReports] = useState<AdminActionReport[]>([])
 
   useEffect(() => {
     const partnersQuery = query(
@@ -96,6 +107,21 @@ export function Admin() {
     )
   }, [])
 
+  useEffect(() => {
+    return onSnapshot(collectionGroup(db, 'householdActions'), (snapshot) => {
+      setReports(
+        snapshot.docs.map((snapshotDoc) => {
+          const data = snapshotDoc.data()
+          return {
+            type: String(data.type || 'consumed') as AdminActionReport['type'],
+            status: String(data.status || 'Pending'),
+            quantity: String(data.quantity || ''),
+          }
+        }),
+      )
+    })
+  }, [])
+
   const filteredPartners = useMemo(() => {
     if (filter === 'all') return partners
     return partners.filter((partner) => partner.approvalStatus === filter)
@@ -114,6 +140,21 @@ export function Admin() {
       ).length,
     }),
     [partners],
+  )
+
+  const reportTotals = useMemo(
+    () => ({
+      donation: reports.filter((item) => item.type === 'donation').length,
+      disposal: reports.filter((item) => item.type === 'disposal').length,
+      consumed: reports.filter((item) => item.type === 'consumed').length,
+      collected: reports.filter((item) => item.status === 'Collected').length,
+      quantity: reports.reduce((total, item) => {
+        const match = item.quantity.trim().match(/^(\d+(?:\.\d+)?)/)
+        const amount = match ? Number(match[1]) : 0
+        return total + (Number.isFinite(amount) ? amount : 0)
+      }, 0),
+    }),
+    [reports],
   )
 
   const handleDecision = async (
@@ -227,6 +268,34 @@ export function Admin() {
           </div>
         )}
 
+        <section className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {[
+            ['Donations', reportTotals.donation, BarChart3],
+            ['Disposals', reportTotals.disposal, Recycle],
+            ['Consumed', reportTotals.consumed, CheckCircle2],
+            ['Collected', reportTotals.collected, ShieldCheck],
+            ['Quantity', reportTotals.quantity, Scale],
+          ].map(([label, value, Icon]) => {
+            const MetricIcon = Icon as typeof BarChart3
+            return (
+              <div
+                key={String(label)}
+                className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
+              >
+                <div className="flex items-center gap-2 text-gray-500">
+                  <MetricIcon className="h-4 w-4" />
+                  <span className="text-xs font-bold uppercase">
+                    {String(label)}
+                  </span>
+                </div>
+                <p className="mt-2 text-2xl font-extrabold text-gray-900">
+                  {String(value)}
+                </p>
+              </div>
+            )
+          })}
+        </section>
+
         {loading ? (
           <div className="flex min-h-64 items-center justify-center rounded-lg border border-gray-200 bg-white">
             <div className="flex items-center gap-3 text-sm font-bold text-gray-500">
@@ -333,9 +402,20 @@ export function Admin() {
                       Verification
                     </div>
                     <p className="mt-1">
-                      {partner.certificateFileName
-                        ? partner.certificateFileName
-                        : 'No certificate file name recorded.'}
+                      {partner.certificateFileUrl ? (
+                        <a
+                          href={partner.certificateFileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-bold text-wastewise-green hover:underline"
+                        >
+                          {partner.certificateFileName || 'Open certificate'}
+                        </a>
+                      ) : partner.certificateFileName ? (
+                        partner.certificateFileName
+                      ) : (
+                        'No certificate file recorded.'
+                      )}
                     </p>
                     <p className="mt-1 text-xs font-semibold text-gray-500">
                       Contact: {partner.contactName || partner.name || 'Not set'}

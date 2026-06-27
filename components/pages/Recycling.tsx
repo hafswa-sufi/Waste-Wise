@@ -1,100 +1,345 @@
-import { useMemo, useState, useRef } from 'react'
-import { RecyclingHeader } from '../recycling/RecyclingHeader'
-import type { RecyclingTab } from '../recycling/RecyclingHeader'
-import { RecyclingMapView } from '../recycling/RecyclingMapView'
-import { CollectionCard } from '../recycling/CollectionCard'
-import { MyCollectionsTab } from '../recycling/MyCollectionsTab'
-import { ScheduleTab } from '../recycling/ScheduleTab'
-import { ReportsTab } from '../recycling/ReportsTab'
-import { mockDisposalRequests } from '../recycling/mockRecyclingData'
-import { useScreenInit } from '../../useScreenInit'
-import gsap from 'gsap'
-const COMPANY_NAME = 'EcoLoop Kenya'
+import { useMemo, useState } from 'react'
+import {
+  Calendar,
+  CheckCircle2,
+  Leaf,
+  LogOut,
+  Package,
+  Recycle,
+  RefreshCw,
+  Scale,
+  Truck,
+} from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import {
+  displayPartnerDate,
+  parseQuantityValue,
+  usePartnerActions,
+  type PartnerAction,
+} from '../partners/partnerActions'
+import { logout } from '../../src/service/authService'
+import { useAuth } from '../../src/context/useAuth'
+
+type ViewMode = 'available' | 'assigned' | 'reports'
+
+function statusClass(status: PartnerAction['status']) {
+  switch (status) {
+    case 'Pending':
+      return 'bg-yellow-50 text-yellow-800 border-yellow-200'
+    case 'Confirmed':
+      return 'bg-blue-50 text-blue-700 border-blue-200'
+    case 'Collected':
+      return 'bg-green-50 text-green-700 border-green-200'
+    default:
+      return 'bg-gray-50 text-gray-600 border-gray-200'
+  }
+}
+
 export function Recycling() {
-  const screenInit = useScreenInit()
-  const [activeTab, setActiveTab] = useState<RecyclingTab>(
-    (screenInit?.activeTab as RecyclingTab | undefined) ?? 'map',
+  const navigate = useNavigate()
+  const { userData } = useAuth()
+  const {
+    availableActions,
+    assignedActions,
+    loading,
+    error,
+    acceptAction,
+    markCollected,
+  } = usePartnerActions('disposal')
+  const [viewMode, setViewMode] = useState<ViewMode>('available')
+  const [workingId, setWorkingId] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+
+  const stats = useMemo(
+    () => ({
+      available: availableActions.length,
+      assigned: assignedActions.length,
+      collected: assignedActions.filter((action) => action.status === 'Collected')
+        .length,
+      quantity: assignedActions.reduce(
+        (total, action) => total + parseQuantityValue(action.quantity),
+        0,
+      ),
+    }),
+    [availableActions, assignedActions],
   )
-  const [filterMode, setFilterMode] = useState<'disposal' | 'all'>('disposal')
-  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(
-    screenInit?.selectedRequestId ?? null,
-  )
-  const contentRef = useRef<HTMLDivElement>(null)
-  const handleTabChange = (tab: RecyclingTab) => {
-    if (tab === activeTab) return
-    if (contentRef.current) {
-      gsap.to(contentRef.current, {
-        opacity: 0,
-        y: 10,
-        duration: 0.15,
-        onComplete: () => {
-          setActiveTab(tab)
-          gsap.fromTo(
-            contentRef.current,
-            {
-              opacity: 0,
-              y: -10,
-            },
-            {
-              opacity: 1,
-              y: 0,
-              duration: 0.25,
-              ease: 'power2.out',
-            },
-          )
-        },
-      })
-    } else {
-      setActiveTab(tab)
+
+  const activeActions =
+    viewMode === 'available' ? availableActions : assignedActions
+
+  const handleLogout = async () => {
+    window.sessionStorage.setItem('wastewise.justLoggedOut', 'true')
+    await logout()
+    navigate('/auth', { replace: true, state: { authState: 'login' } })
+  }
+
+  const runAction = async (
+    action: PartnerAction,
+    handler: (selectedAction: PartnerAction) => Promise<void>,
+    successMessage: string,
+  ) => {
+    setWorkingId(action.id)
+    setMessage(null)
+    try {
+      await handler(action)
+      setMessage(successMessage)
+    } catch (actionError) {
+      console.error('Recycling action error:', actionError)
+      setMessage('Could not update this collection. Check your partner permissions.')
+    } finally {
+      setWorkingId(null)
     }
   }
-  const sortedRequests = useMemo(
-    () => [...mockDisposalRequests].sort((a, b) => a.distanceKm - b.distanceKm),
-    [],
-  )
-  const selectedRequest = useMemo(
-    () => mockDisposalRequests.find((r) => r.id === selectedRequestId) || null,
-    [selectedRequestId],
-  )
+
   return (
-    <div className="h-screen w-full flex flex-col bg-gray-50 overflow-hidden font-sans selection:bg-wastewise-green selection:text-white">
-      <RecyclingHeader
-        activeTab={activeTab}
-        onTabChange={handleTabChange}
-        companyName={COMPANY_NAME}
-      />
+    <div className="min-h-screen bg-gray-50 font-sans selection:bg-wastewise-green selection:text-white">
+      <header className="sticky top-0 z-40 border-b border-gray-200 bg-white px-4 py-3 shadow-sm sm:px-6">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="flex items-center gap-2"
+          >
+            <Leaf className="h-6 w-6 text-wastewise-green" />
+            <span className="text-xl font-extrabold text-gray-900">
+              WasteWise
+            </span>
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="hidden text-right sm:block">
+              <p className="text-sm font-bold text-gray-900">
+                {userData?.organizationName || userData?.name || 'Recycler'}
+              </p>
+              <p className="text-xs font-semibold text-gray-500">
+                Recycling Partner
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-red-50 hover:text-red-600"
+              aria-label="Log out"
+              title="Log out"
+            >
+              <LogOut className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      </header>
 
-      <div ref={contentRef} className="flex-1 flex flex-col overflow-hidden">
-        {activeTab === 'map' && (
-          <RecyclingMapView
-            requests={sortedRequests}
-            onSelectRequest={setSelectedRequestId}
-            filterMode={filterMode}
-            setFilterMode={setFilterMode}
-          />
-        )}
-        {activeTab === 'collections' && (
-          <div className="flex-1 overflow-y-auto">
-            <MyCollectionsTab />
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-8">
+        <section className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-lg border border-orange-100 bg-orange-50 px-3 py-1 text-xs font-bold text-wastewise-orange">
+              <Recycle className="h-4 w-4" />
+              Recycling Dashboard
+            </div>
+            <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-gray-900">
+              Disposal Collections
+            </h1>
+            <p className="mt-1 max-w-2xl text-sm text-gray-500">
+              Accept household disposal requests and update collection status
+              after pickup.
+            </p>
           </div>
-        )}
-        {activeTab === 'schedule' && (
-          <div className="flex-1 overflow-y-auto">
-            <ScheduleTab />
-          </div>
-        )}
-        {activeTab === 'reports' && (
-          <div className="flex-1 overflow-y-auto">
-            <ReportsTab />
-          </div>
-        )}
-      </div>
 
-      <CollectionCard
-        request={selectedRequest}
-        companyName={COMPANY_NAME}
-        onClose={() => setSelectedRequestId(null)}
-      />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+              <span className="block text-2xl font-extrabold text-gray-900">
+                {stats.available}
+              </span>
+              <span className="text-xs font-bold uppercase text-gray-500">
+                Available
+              </span>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+              <span className="block text-2xl font-extrabold text-gray-900">
+                {stats.assigned}
+              </span>
+              <span className="text-xs font-bold uppercase text-gray-500">
+                Mine
+              </span>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+              <span className="block text-2xl font-extrabold text-gray-900">
+                {stats.collected}
+              </span>
+              <span className="text-xs font-bold uppercase text-gray-500">
+                Collected
+              </span>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+              <span className="block text-2xl font-extrabold text-gray-900">
+                {stats.quantity}
+              </span>
+              <span className="text-xs font-bold uppercase text-gray-500">
+                Qty
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <div className="mb-4 flex rounded-lg bg-gray-100 p-1 sm:w-fit">
+          {(['available', 'assigned', 'reports'] as ViewMode[]).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setViewMode(mode)}
+              className={`flex-1 rounded-md px-4 py-2 text-sm font-bold capitalize sm:flex-none ${
+                viewMode === mode
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {mode === 'assigned' ? 'My Collections' : mode}
+            </button>
+          ))}
+        </div>
+
+        {message && (
+          <div className="mb-4 rounded-lg border border-green-100 bg-green-50 px-4 py-3 text-sm font-semibold text-green-700">
+            {message}
+          </div>
+        )}
+
+        {error && (
+          <div className="mb-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            {error}
+          </div>
+        )}
+
+        {viewMode === 'reports' ? (
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-2 text-gray-500">
+                <Scale className="h-5 w-5" />
+                <span className="text-sm font-bold uppercase">
+                  Assigned Quantity
+                </span>
+              </div>
+              <p className="mt-3 text-4xl font-extrabold text-gray-900">
+                {stats.quantity}
+              </p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-2 text-gray-500">
+                <Truck className="h-5 w-5" />
+                <span className="text-sm font-bold uppercase">
+                  Active Collections
+                </span>
+              </div>
+              <p className="mt-3 text-4xl font-extrabold text-gray-900">
+                {stats.assigned - stats.collected}
+              </p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-2 text-gray-500">
+                <CheckCircle2 className="h-5 w-5" />
+                <span className="text-sm font-bold uppercase">Completed</span>
+              </div>
+              <p className="mt-3 text-4xl font-extrabold text-gray-900">
+                {stats.collected}
+              </p>
+            </div>
+          </div>
+        ) : loading ? (
+          <div className="flex min-h-64 items-center justify-center rounded-lg border border-gray-200 bg-white">
+            <div className="flex items-center gap-3 text-sm font-bold text-gray-500">
+              <RefreshCw className="h-5 w-5 animate-spin" />
+              Loading disposal requests...
+            </div>
+          </div>
+        ) : activeActions.length === 0 ? (
+          <div className="rounded-lg border border-gray-200 bg-white px-6 py-12 text-center">
+            <Package className="mx-auto h-10 w-10 text-gray-300" />
+            <h2 className="mt-3 text-lg font-extrabold text-gray-900">
+              No disposal requests
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              New household disposal requests will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {activeActions.map((action) => (
+              <article
+                key={`${action.householdId}-${action.id}`}
+                className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-lg font-extrabold text-gray-900">
+                      {action.name}
+                    </h2>
+                    <p className="mt-1 text-sm font-semibold text-gray-500">
+                      Household {action.householdId.slice(0, 8)}
+                    </p>
+                  </div>
+                  <span
+                    className={`rounded-full border px-2.5 py-1 text-xs font-bold ${statusClass(
+                      action.status,
+                    )}`}
+                  >
+                    {action.status}
+                  </span>
+                </div>
+
+                <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Package className="h-4 w-4 text-gray-400" />
+                    <span>{action.quantity}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Calendar className="h-4 w-4 text-gray-400" />
+                    <span>{displayPartnerDate(action.pickupDate)}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-600 sm:col-span-2">
+                    <Truck className="h-4 w-4 text-gray-400" />
+                    <span>{action.partner}</span>
+                  </div>
+                </div>
+
+                <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  {!action.partnerUserId && (
+                    <button
+                      type="button"
+                      disabled={workingId === action.id}
+                      onClick={() =>
+                        runAction(
+                          action,
+                          acceptAction,
+                          `${action.name} collection accepted.`,
+                        )
+                      }
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-wastewise-green px-4 py-2 text-sm font-bold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      Accept Collection
+                    </button>
+                  )}
+                  {action.partnerUserId && action.status !== 'Collected' && (
+                    <button
+                      type="button"
+                      disabled={workingId === action.id}
+                      onClick={() =>
+                        runAction(
+                          action,
+                          markCollected,
+                          `${action.name} marked as collected.`,
+                        )
+                      }
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-wastewise-green px-4 py-2 text-sm font-bold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      Mark Collected
+                    </button>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </main>
     </div>
   )
 }

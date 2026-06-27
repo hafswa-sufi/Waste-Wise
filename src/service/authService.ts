@@ -10,7 +10,8 @@ import {
 } from 'firebase/auth'
 import type { User } from 'firebase/auth'
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
-import { auth, db, googleProvider } from '../firebase/firebase'
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
+import { auth, db, googleProvider, storage } from '../firebase/firebase'
 
 export type UserRole = 'Household' | 'Admin' | 'NGO' | 'RecyclingFirm'
 
@@ -28,6 +29,8 @@ export interface UserData {
   contactName?: string
   designation?: string
   certificateFileName?: string
+  certificateFilePath?: string
+  certificateFileUrl?: string
   verificationDocumentStatus?: 'not_submitted' | 'submitted'
   createdAt: unknown
 }
@@ -41,6 +44,8 @@ export interface SignupProfileData {
   contactName?: string
   designation?: string
   certificateFileName?: string
+  certificateFilePath?: string
+  certificateFileUrl?: string
   verificationDocumentStatus?: 'not_submitted' | 'submitted'
 }
 
@@ -89,10 +94,27 @@ export const signUp = async (
   password: string,
   role: UserRole,
   profileData: SignupProfileData = {},
+  certificateFile?: File | null,
 ) => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password)
     const user = userCredential.user
+    let uploadedCertificate: SignupProfileData = {}
+
+    if (certificateFile && requiresApproval(role)) {
+      const safeName = certificateFile.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const filePath = `partner-certificates/${user.uid}/${Date.now()}-${safeName}`
+      const fileRef = ref(storage, filePath)
+      await uploadBytes(fileRef, certificateFile, {
+        contentType: certificateFile.type || 'application/octet-stream',
+      })
+      uploadedCertificate = {
+        certificateFileName: certificateFile.name,
+        certificateFilePath: filePath,
+        certificateFileUrl: await getDownloadURL(fileRef),
+        verificationDocumentStatus: 'submitted',
+      }
+    }
 
     await setDoc(doc(db, 'users', user.uid), {
       userId: user.uid,
@@ -102,6 +124,7 @@ export const signUp = async (
       emailVerified: user.emailVerified,
       approvalStatus: requiresApproval(role) ? 'pending' : 'approved',
       ...cleanProfileData(profileData),
+      ...uploadedCertificate,
       createdAt: serverTimestamp(),
     })
 

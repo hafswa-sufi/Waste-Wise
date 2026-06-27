@@ -77,5 +77,24 @@ export function RequireAuth({ children, allowedRoles }: RequireAuthProps) {
     )
   }
 
+  if (
+    allowedRoles &&
+    userData &&
+    (userData.role === 'NGO' || userData.role === 'RecyclingFirm') &&
+    userData.approvalStatus !== 'approved'
+  ) {
+    return (
+      <Navigate
+        to="/auth?mode=login&error=unauthorized"
+        replace
+        state={{
+          from: location.pathname,
+          authState: 'login',
+          authError: 'unauthorized',
+        }}
+      />
+    )
+  }
+
   return <>{children}</>
 }
