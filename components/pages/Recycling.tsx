@@ -4,11 +4,13 @@ import {
   CheckCircle2,
   Leaf,
   LogOut,
+  MapPinned,
   Package,
   Recycle,
   RefreshCw,
   Scale,
   Truck,
+  XCircle,
 } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
@@ -17,10 +19,11 @@ import {
   usePartnerActions,
   type PartnerAction,
 } from '../partners/partnerActions'
+import { PartnerRequestMap } from '../partners/PartnerRequestMap'
 import { logout } from '../../src/service/authService'
 import { useAuth } from '../../src/context/useAuth'
 
-type ViewMode = 'available' | 'assigned' | 'reports'
+type ViewMode = 'available' | 'assigned' | 'map' | 'reports'
 
 function statusClass(status: PartnerAction['status']) {
   switch (status) {
@@ -44,6 +47,7 @@ export function Recycling() {
     loading,
     error,
     acceptAction,
+    declineAction,
     markCollected,
   } = usePartnerActions('disposal')
   const [viewMode, setViewMode] = useState<ViewMode>('available')
@@ -66,6 +70,9 @@ export function Recycling() {
 
   const activeActions =
     viewMode === 'available' ? availableActions : assignedActions
+  const mapActions = [...availableActions, ...assignedActions].filter(
+    (action) => action.status !== 'Collected',
+  )
 
   const handleLogout = async () => {
     window.sessionStorage.setItem('wastewise.justLoggedOut', 'true')
@@ -77,12 +84,14 @@ export function Recycling() {
     action: PartnerAction,
     handler: (selectedAction: PartnerAction) => Promise<void>,
     successMessage: string,
+    nextView?: ViewMode,
   ) => {
     setWorkingId(action.id)
     setMessage(null)
     try {
       await handler(action)
       setMessage(successMessage)
+      if (nextView) setViewMode(nextView)
     } catch (actionError) {
       console.error('Recycling action error:', actionError)
       setMessage('Could not update this collection. Check your partner permissions.')
@@ -116,9 +125,13 @@ export function Recycling() {
             </div>
             <Link
               to="/partner/profile"
-              className="hidden rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-600 hover:bg-gray-50 sm:inline-flex"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-wastewise-green text-sm font-extrabold text-white hover:bg-green-800"
+              aria-label="Open partner profile"
+              title="Open partner profile"
             >
-              Settings
+              {(userData?.organizationName || userData?.name || 'RC')
+                .slice(0, 2)
+                .toUpperCase()}
             </Link>
             <button
               type="button"
@@ -186,7 +199,7 @@ export function Recycling() {
         </section>
 
         <div className="mb-4 flex rounded-lg bg-gray-100 p-1 sm:w-fit">
-          {(['available', 'assigned', 'reports'] as ViewMode[]).map((mode) => (
+          {(['available', 'assigned', 'map', 'reports'] as ViewMode[]).map((mode) => (
             <button
               key={mode}
               type="button"
@@ -197,7 +210,10 @@ export function Recycling() {
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              {mode === 'assigned' ? 'My Collections' : mode}
+              <span className="inline-flex items-center gap-1.5">
+                {mode === 'map' && <MapPinned className="h-4 w-4" />}
+                {mode === 'assigned' ? 'My Collections' : mode}
+              </span>
             </button>
           ))}
         </div>
@@ -214,7 +230,13 @@ export function Recycling() {
           </div>
         )}
 
-        {viewMode === 'reports' ? (
+        {viewMode === 'map' ? (
+          <PartnerRequestMap
+            actions={mapActions}
+            emptyLabel="Only requests with a saved household pickup pin can appear here."
+            pinTone="disposal"
+          />
+        ) : viewMode === 'reports' ? (
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
               <div className="flex items-center gap-2 text-gray-500">
@@ -307,21 +329,39 @@ export function Recycling() {
 
                 <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
                   {!action.partnerUserId && (
-                    <button
-                      type="button"
-                      disabled={workingId === action.id}
-                      onClick={() =>
-                        runAction(
-                          action,
-                          acceptAction,
-                          `${action.name} collection accepted.`,
-                        )
-                      }
-                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-wastewise-green px-4 py-2 text-sm font-bold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      Accept Collection
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        disabled={workingId === action.id}
+                        onClick={() =>
+                          runAction(
+                            action,
+                            declineAction,
+                            `${action.name} declined. Another recycling partner can still accept it.`,
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-100 px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <XCircle className="h-4 w-4" />
+                        Decline
+                      </button>
+                      <button
+                        type="button"
+                        disabled={workingId === action.id}
+                        onClick={() =>
+                          runAction(
+                            action,
+                            acceptAction,
+                            `${action.name} collection accepted.`,
+                            'assigned',
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-wastewise-green px-4 py-2 text-sm font-bold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                        Accept Collection
+                      </button>
+                    </>
                   )}
                   {action.partnerUserId && action.status !== 'Collected' && (
                     <button

@@ -5,9 +5,11 @@ import {
   HandHeart,
   Leaf,
   LogOut,
+  MapPinned,
   Package,
   RefreshCw,
   Users,
+  XCircle,
 } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
@@ -16,10 +18,11 @@ import {
   usePartnerActions,
   type PartnerAction,
 } from '../partners/partnerActions'
+import { PartnerRequestMap } from '../partners/PartnerRequestMap'
 import { logout } from '../../src/service/authService'
 import { useAuth } from '../../src/context/useAuth'
 
-type ViewMode = 'available' | 'assigned'
+type ViewMode = 'available' | 'assigned' | 'map'
 
 function statusClass(status: PartnerAction['status']) {
   switch (status) {
@@ -43,6 +46,7 @@ export function Dashboard() {
     loading,
     error,
     acceptAction,
+    declineAction,
     markCollected,
   } = usePartnerActions('donation')
   const [viewMode, setViewMode] = useState<ViewMode>('available')
@@ -51,6 +55,9 @@ export function Dashboard() {
 
   const activeActions =
     viewMode === 'available' ? availableActions : assignedActions
+  const mapActions = [...availableActions, ...assignedActions].filter(
+    (action) => action.status !== 'Collected',
+  )
 
   const stats = useMemo(
     () => ({
@@ -76,12 +83,14 @@ export function Dashboard() {
     action: PartnerAction,
     handler: (selectedAction: PartnerAction) => Promise<void>,
     successMessage: string,
+    nextView?: ViewMode,
   ) => {
     setWorkingId(action.id)
     setMessage(null)
     try {
       await handler(action)
       setMessage(successMessage)
+      if (nextView) setViewMode(nextView)
     } catch (actionError) {
       console.error('NGO action error:', actionError)
       setMessage('Could not update this request. Check your partner permissions.')
@@ -115,9 +124,13 @@ export function Dashboard() {
             </div>
             <Link
               to="/partner/profile"
-              className="hidden rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-600 hover:bg-gray-50 sm:inline-flex"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-wastewise-green text-sm font-extrabold text-white hover:bg-green-800"
+              aria-label="Open partner profile"
+              title="Open partner profile"
             >
-              Settings
+              {(userData?.organizationName || userData?.name || 'NGO')
+                .slice(0, 2)
+                .toUpperCase()}
             </Link>
             <button
               type="button"
@@ -207,6 +220,20 @@ export function Dashboard() {
           >
             My Pickups
           </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('map')}
+            className={`flex-1 rounded-md px-4 py-2 text-sm font-bold sm:flex-none ${
+              viewMode === 'map'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <MapPinned className="h-4 w-4" />
+              Map
+            </span>
+          </button>
         </div>
 
         {message && (
@@ -221,7 +248,13 @@ export function Dashboard() {
           </div>
         )}
 
-        {loading ? (
+        {viewMode === 'map' ? (
+          <PartnerRequestMap
+            actions={mapActions}
+            emptyLabel="Only requests with a saved household pickup pin can appear here."
+            pinTone="donation"
+          />
+        ) : loading ? (
           <div className="flex min-h-64 items-center justify-center rounded-lg border border-gray-200 bg-white">
             <div className="flex items-center gap-3 text-sm font-bold text-gray-500">
               <RefreshCw className="h-5 w-5 animate-spin" />
@@ -280,21 +313,39 @@ export function Dashboard() {
 
                 <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
                   {!action.partnerUserId && (
-                    <button
-                      type="button"
-                      disabled={workingId === action.id}
-                      onClick={() =>
-                        runAction(
-                          action,
-                          acceptAction,
-                          `${action.name} pickup accepted.`,
-                        )
-                      }
-                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-wastewise-green px-4 py-2 text-sm font-bold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      Accept Pickup
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        disabled={workingId === action.id}
+                        onClick={() =>
+                          runAction(
+                            action,
+                            declineAction,
+                            `${action.name} declined. Another NGO can still accept it.`,
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-100 px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <XCircle className="h-4 w-4" />
+                        Decline
+                      </button>
+                      <button
+                        type="button"
+                        disabled={workingId === action.id}
+                        onClick={() =>
+                          runAction(
+                            action,
+                            acceptAction,
+                            `${action.name} pickup accepted.`,
+                            'assigned',
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-wastewise-green px-4 py-2 text-sm font-bold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                        Accept Pickup
+                      </button>
+                    </>
                   )}
                   {action.partnerUserId && action.status !== 'Collected' && (
                     <button

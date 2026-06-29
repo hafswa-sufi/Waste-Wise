@@ -22,6 +22,9 @@ export interface UserData {
   role: UserRole
   approvalStatus: 'approved' | 'pending' | 'rejected'
   location?: string
+  buildingNameNumber?: string
+  lat?: number
+  lng?: number
   organizationName?: string
   organizationType?: 'NGO' | 'Recycling Company'
   registrationNumber?: string
@@ -37,7 +40,11 @@ export interface UserData {
 
 export interface SignupProfileData {
   location?: string
+  buildingNameNumber?: string
+  lat?: number
+  lng?: number
   organizationName?: string
+
   organizationType?: 'NGO' | 'Recycling Company'
   registrationNumber?: string
   operatingCounties?: string
@@ -48,6 +55,7 @@ export interface SignupProfileData {
   certificateFileUrl?: string
   verificationDocumentStatus?: 'not_submitted' | 'submitted'
 }
+
 
 function cleanProfileData(data: SignupProfileData = {}) {
   return Object.fromEntries(

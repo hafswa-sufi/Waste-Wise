@@ -1,7 +1,15 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { updatePassword, updateProfile } from 'firebase/auth'
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
+import {
+  MapContainer,
+  Marker,
+  TileLayer,
+  useMap,
+  useMapEvents,
+} from 'react-leaflet'
+import L from 'leaflet'
 import {
   ArrowLeft,
   KeyRound,
@@ -17,6 +25,75 @@ import { useAuth } from '../../src/context/useAuth'
 import { logout, resendVerificationEmail } from '../../src/service/authService'
 import { authErrorMessage } from '../auth/authErrors'
 
+function ProfilePinPicker({
+  lat,
+  lng,
+  onChange,
+}: {
+  lat: number | null
+  lng: number | null
+  onChange: (next: { lat: number; lng: number }) => void
+}) {
+  const position: [number, number] | null =
+    lat !== null && lng !== null ? [lat, lng] : null
+  const center: [number, number] = useMemo(
+    () => position ?? [-1.2921, 36.8219],
+    [position],
+  )
+  const pinIcon = useMemo(
+    () =>
+      L.divIcon({
+        className: 'custom-leaflet-icon',
+        html: '<div class="custom-pin donation"></div>',
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+      }),
+    [],
+  )
+
+  return (
+    <MapContainer
+      center={center}
+      zoom={16}
+      style={{ height: 220, width: '100%' }}
+      zoomControl={false}
+    >
+      <TileLayer
+        attribution="&copy; OpenStreetMap contributors"
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+      <ProfileMapRecenter position={position} />
+      <ProfileClickCatcher onChange={onChange} />
+      {position && <Marker position={position} icon={pinIcon} />}
+    </MapContainer>
+  )
+}
+
+function ProfileMapRecenter({
+  position,
+}: {
+  position: [number, number] | null
+}) {
+  const map = useMap()
+  useEffect(() => {
+    if (position) map.setView(position, 17)
+  }, [map, position])
+  return null
+}
+
+function ProfileClickCatcher({
+  onChange,
+}: {
+  onChange: (next: { lat: number; lng: number }) => void
+}) {
+  useMapEvents({
+    click(event) {
+      onChange({ lat: event.latlng.lat, lng: event.latlng.lng })
+    },
+  })
+  return null
+}
+
 export function HouseholdProfile() {
   const navigate = useNavigate()
   const { currentUser, userData } = useAuth()
@@ -26,8 +103,18 @@ export function HouseholdProfile() {
       : ''
   const [name, setName] = useState(userData?.name ?? '')
   const [location, setLocation] = useState(locationFromProfile)
+  const [buildingNameNumber, setBuildingNameNumber] = useState(
+    userData?.buildingNameNumber ?? '',
+  )
+  const [pinLat, setPinLat] = useState<number | null>(
+    typeof userData?.lat === 'number' ? userData.lat : null,
+  )
+  const [pinLng, setPinLng] = useState<number | null>(
+    typeof userData?.lng === 'number' ? userData.lng : null,
+  )
   const [newPassword, setNewPassword] = useState('')
   const [saving, setSaving] = useState(false)
+  const [mapSearchLoading, setMapSearchLoading] = useState(false)
   const [verificationSending, setVerificationSending] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -36,7 +123,17 @@ export function HouseholdProfile() {
   useEffect(() => {
     setName(userData?.name ?? currentUser?.displayName ?? '')
     setLocation(locationFromProfile)
-  }, [currentUser?.displayName, locationFromProfile, userData?.name])
+    setBuildingNameNumber(userData?.buildingNameNumber ?? '')
+    setPinLat(typeof userData?.lat === 'number' ? userData.lat : null)
+    setPinLng(typeof userData?.lng === 'number' ? userData.lng : null)
+  }, [
+    currentUser?.displayName,
+    locationFromProfile,
+    userData?.buildingNameNumber,
+    userData?.lat,
+    userData?.lng,
+    userData?.name,
+  ])
 
   const handleSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -55,6 +152,9 @@ export function HouseholdProfile() {
         {
           name: name.trim() || userData?.name || 'WasteWise User',
           location: location.trim(),
+          buildingNameNumber: buildingNameNumber.trim(),
+          lat: pinLat,
+          lng: pinLng,
           updatedAt: serverTimestamp(),
         },
         { merge: true },
@@ -75,6 +175,49 @@ export function HouseholdProfile() {
       )
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleFindLocation = async () => {
+    const query = [buildingNameNumber, location, 'Kenya']
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(', ')
+
+    if (!query) {
+      setError('Enter your household location or building name first.')
+      return
+    }
+
+    setMessage(null)
+    setError(null)
+    setMapSearchLoading(true)
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ke&q=${encodeURIComponent(
+          query,
+        )}`,
+      )
+      const results = (await response.json()) as Array<{
+        lat?: string
+        lon?: string
+      }>
+      const result = results[0]
+      const lat = Number(result?.lat)
+      const lng = Number(result?.lon)
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        setError('Could not find that place. Try estate, road, town, and county.')
+        return
+      }
+
+      setPinLat(lat)
+      setPinLng(lng)
+      setMessage('Location found. Save settings to use this pin for pickups.')
+    } catch {
+      setError('Could not search the map right now. You can still click the map manually.')
+    } finally {
+      setMapSearchLoading(false)
     }
   }
 
@@ -195,6 +338,52 @@ export function HouseholdProfile() {
                 />
               </div>
             </label>
+
+            <label className="block">
+              <span className="text-sm font-bold text-gray-700">
+                Building name / number
+              </span>
+              <div className="mt-2 flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-2 focus-within:border-wastewise-green focus-within:ring-2 focus-within:ring-wastewise-green/20">
+                <MapPin className="w-4 h-4 text-gray-400" />
+                <input
+                  value={buildingNameNumber}
+                  onChange={(event) =>
+                    setBuildingNameNumber(event.target.value)
+                  }
+                  className="w-full text-sm outline-none"
+                  placeholder="Estate, building, block, or house number"
+                />
+              </div>
+            </label>
+
+            <div className="block">
+              <span className="text-sm font-bold text-gray-700">
+                Exact pickup pin
+              </span>
+              <div className="mt-2 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                <div className="border-b border-gray-200 bg-white p-3">
+                  <button
+                    type="button"
+                    onClick={handleFindLocation}
+                    disabled={mapSearchLoading}
+                    className="w-full rounded-lg border border-green-100 bg-green-50 px-3 py-2 text-sm font-bold text-wastewise-green hover:bg-green-100 disabled:opacity-60"
+                  >
+                    {mapSearchLoading ? 'Finding location...' : 'Find on map'}
+                  </button>
+                </div>
+                <ProfilePinPicker
+                  lat={pinLat}
+                  lng={pinLng}
+                  onChange={(next) => {
+                    setPinLat(next.lat)
+                    setPinLng(next.lng)
+                  }}
+                />
+              </div>
+              <p className="mt-2 text-xs font-semibold text-gray-500">
+                Click the map to update the pin partners use for pickups.
+              </p>
+            </div>
 
             <label className="block">
               <span className="text-sm font-bold text-gray-700">

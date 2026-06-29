@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   addDoc,
+  arrayUnion,
   collection,
   collectionGroup,
   onSnapshot,
@@ -34,6 +35,13 @@ export interface PartnerAction {
   pickupDate: string
   status: PartnerActionStatus
   notificationRead?: boolean
+  declinedPartnerIds: string[]
+  pickupLocation?: {
+    label?: string
+    buildingNameNumber?: string
+    lat?: number
+    lng?: number
+  }
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }
@@ -42,11 +50,19 @@ function asString(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback
 }
 
+function isNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
 function normalizePartnerAction(
   actionRef: DocumentReference,
   data: Record<string, unknown>,
 ): PartnerAction {
   const householdId = actionRef.parent.parent?.id ?? ''
+  const pickupLocation =
+    data.pickupLocation && typeof data.pickupLocation === 'object'
+      ? (data.pickupLocation as Record<string, unknown>)
+      : null
 
   return {
     id: actionRef.id,
@@ -61,6 +77,20 @@ function normalizePartnerAction(
     pickupDate: asString(data.pickupDate),
     status: asString(data.status, 'Pending') as PartnerActionStatus,
     notificationRead: data.notificationRead === true,
+    declinedPartnerIds: Array.isArray(data.declinedPartnerIds)
+      ? data.declinedPartnerIds.filter(
+          (partnerId): partnerId is string => typeof partnerId === 'string',
+        )
+      : [],
+    pickupLocation: pickupLocation
+      ? {
+          label: asString(pickupLocation.label) || undefined,
+          buildingNameNumber:
+            asString(pickupLocation.buildingNameNumber) || undefined,
+          lat: isNumber(pickupLocation.lat) ? pickupLocation.lat : undefined,
+          lng: isNumber(pickupLocation.lng) ? pickupLocation.lng : undefined,
+        }
+      : undefined,
     createdAt: data.createdAt as Timestamp | undefined,
     updatedAt: data.updatedAt as Timestamp | undefined,
   }
@@ -126,6 +156,9 @@ export function usePartnerActions(type: 'donation' | 'disposal') {
           .filter(
             (action) =>
               !action.partnerUserId || action.partnerUserId === currentUser.uid,
+          )
+          .filter(
+            (action) => !action.declinedPartnerIds.includes(currentUser.uid),
           )
           .sort((a, b) => {
             const statusDiff = statusRank(a.status) - statusRank(b.status)
@@ -199,6 +232,27 @@ export function usePartnerActions(type: 'donation' | 'disposal') {
     await writeStatusHistory(action, action.status, 'Collected')
   }
 
+  async function declineAction(action: PartnerAction) {
+    if (!currentUser || !userData) throw new Error('Please log in again.')
+    if (action.partnerUserId) {
+      throw new Error('Assigned requests cannot be declined here.')
+    }
+
+    await updateDoc(action.ref, {
+      declinedPartnerIds: arrayUnion(currentUser.uid),
+      updatedAt: serverTimestamp(),
+    })
+
+    await addDoc(collection(action.ref, 'statusHistory'), {
+      previousStatus: action.status,
+      status: action.status,
+      changedByUserId: currentUser.uid,
+      changedByRole: userData.role,
+      notes: 'Partner declined request.',
+      changedAt: serverTimestamp(),
+    })
+  }
+
   return {
     actions,
     availableActions,
@@ -206,6 +260,7 @@ export function usePartnerActions(type: 'donation' | 'disposal') {
     loading,
     error,
     acceptAction,
+    declineAction,
     markCollected,
   }
 }

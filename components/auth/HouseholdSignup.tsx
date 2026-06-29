@@ -1,12 +1,90 @@
-import { useState, type FormEvent } from 'react'
-import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { ArrowLeft, Eye, EyeOff, MapPin } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { signInWithGoogle, signUp } from '../../src/service/authService'
 import { authErrorMessage } from './authErrors'
+import {
+  MapContainer,
+  Marker,
+  TileLayer,
+  useMap,
+  useMapEvents,
+} from 'react-leaflet'
+import L from 'leaflet'
+
 
 interface HouseholdSignupProps {
   onLoginClick: () => void
 }
+
+function PinPicker({
+  lat,
+  lng,
+  onChange,
+}: {
+  lat: number | null
+  lng: number | null
+  onChange: (next: { lat: number; lng: number }) => void
+}) {
+  const position: [number, number] | null =
+    lat !== null && lng !== null ? [lat, lng] : null
+
+  const center: [number, number] = useMemo(
+    () => (position ? position : [-1.2921, 36.8219]),
+    [position],
+  )
+
+  const pinIcon = useMemo(
+    () =>
+      L.divIcon({
+        className: 'custom-leaflet-icon',
+        html: `<div class="custom-pin donation"></div>`,
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+      }),
+    [],
+  )
+
+  return (
+    <MapContainer
+      center={center}
+      zoom={16}
+      style={{ height: 220, width: '100%' }}
+      zoomControl={false}
+    >
+      <TileLayer
+        attribution="&copy; OpenStreetMap contributors"
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+      <MapRecenter position={position} />
+      <ClickCatcher onChange={onChange} />
+      {position && <Marker position={position} icon={pinIcon} />}
+    </MapContainer>
+  )
+}
+
+function MapRecenter({ position }: { position: [number, number] | null }) {
+  const map = useMap()
+  useEffect(() => {
+    if (position) map.setView(position, 17)
+  }, [map, position])
+  return null
+}
+
+function ClickCatcher({
+  onChange,
+}: {
+  onChange: (next: { lat: number; lng: number }) => void
+}) {
+  useMapEvents({
+    click(e) {
+      onChange({ lat: e.latlng.lat, lng: e.latlng.lng })
+    },
+  })
+  return null
+}
+
+
 
 export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
   const navigate = useNavigate()
@@ -15,6 +93,12 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [location, setLocation] = useState('')
+
+  const [buildingNameNumber, setBuildingNameNumber] = useState('')
+  const [pinLat, setPinLat] = useState<number | null>(null)
+  const [pinLng, setPinLng] = useState<number | null>(null)
+  const [mapSearchLoading, setMapSearchLoading] = useState(false)
+
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -24,6 +108,8 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
     if (!fullName.trim()) return 'Full name is required.'
     if (!email.trim()) return 'Email address is required.'
     if (!location.trim()) return 'County or location is required.'
+    if (!buildingNameNumber.trim()) return 'Building name/number is required.'
+    if (pinLat === null || pinLng === null) return 'Please click the map to set your pin location.'
     if (!password) return 'Password is required.'
     if (password.length < 6) return 'Password should be at least 6 characters.'
     if (!confirmPassword) return 'Please confirm your password.'
@@ -45,6 +131,9 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
     try {
       await signUp(fullName, email, password, 'Household', {
         location: location.trim(),
+        buildingNameNumber: buildingNameNumber.trim(),
+        lat: pinLat!,
+        lng: pinLng!,
       })
       navigate('/household')
     } catch (err) {
@@ -55,15 +144,71 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
   }
 
   const handleGoogleSignup = async () => {
+    // For Google signup, require pin fields too (keep it simple and consistent)
     setError(null)
     setIsLoading(true)
     try {
-      await signInWithGoogle('Household')
+      if (!buildingNameNumber.trim()) {
+        setError('Building name/number is required.')
+        return
+      }
+      if (pinLat === null || pinLng === null) {
+        setError('Please click the map to set your pin location.')
+        return
+      }
+
+      await signInWithGoogle('Household', {
+        location: location.trim(),
+        buildingNameNumber: buildingNameNumber.trim(),
+        lat: pinLat,
+        lng: pinLng,
+      })
       navigate('/household')
     } catch (err) {
       setError(authErrorMessage(err, 'Google sign up failed. Try again.'))
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleFindLocation = async () => {
+    const query = [buildingNameNumber, location, 'Kenya']
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(', ')
+
+    if (!query) {
+      setError('Enter your county/location or building name first.')
+      return
+    }
+
+    setError(null)
+    setMapSearchLoading(true)
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ke&q=${encodeURIComponent(
+          query,
+        )}`,
+      )
+      const results = (await response.json()) as Array<{
+        lat?: string
+        lon?: string
+      }>
+      const result = results[0]
+      const lat = Number(result?.lat)
+      const lng = Number(result?.lon)
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        setError('Could not find that place. Try estate, road, town, and county.')
+        return
+      }
+
+      setPinLat(lat)
+      setPinLng(lng)
+    } catch {
+      setError('Could not search the map right now. You can still click the map manually.')
+    } finally {
+      setMapSearchLoading(false)
     }
   }
 
@@ -153,6 +298,64 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
               <option value="Nakuru">Nakuru</option>
               <option value="Uasin Gishu">Uasin Gishu</option>
             </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1.5">
+              Building name / number
+            </label>
+            <input
+              type="text"
+              value={buildingNameNumber}
+              onChange={(e) => setBuildingNameNumber(e.target.value)}
+              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
+              placeholder="e.g. Kilimani Heights, Block A"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-bold text-gray-700">
+              Set exact pickup pin
+            </label>
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <div className="flex items-start gap-2 text-sm text-gray-600 mb-2">
+                <MapPin className="mt-0.5 h-4 w-4 text-wastewise-green" />
+                <span>
+                  Search using the fields above or click the map to place/move
+                  your pin.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleFindLocation}
+                disabled={mapSearchLoading}
+                className="mb-3 w-full rounded-lg border border-green-100 bg-white px-3 py-2 text-sm font-bold text-wastewise-green hover:bg-green-50 disabled:opacity-60"
+              >
+                {mapSearchLoading ? 'Finding location...' : 'Find on map'}
+              </button>
+              <PinPicker
+                lat={pinLat}
+                lng={pinLng}
+                onChange={(next) => {
+                  setPinLat(next.lat)
+                  setPinLng(next.lng)
+                }}
+              />
+              <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <span className="font-bold text-gray-600">Lat</span>
+                  <div className="font-mono text-gray-900">
+                    {pinLat === null ? '—' : pinLat.toFixed(6)}
+                  </div>
+                </div>
+                <div>
+                  <span className="font-bold text-gray-600">Lng</span>
+                  <div className="font-mono text-gray-900">
+                    {pinLng === null ? '—' : pinLng.toFixed(6)}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {error && (

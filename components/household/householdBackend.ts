@@ -4,6 +4,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   onSnapshot,
   orderBy,
   query,
@@ -68,6 +69,12 @@ export interface ActionItem {
   pickupDate: string
   status: ActionStatus
   notificationRead?: boolean
+  pickupLocation?: {
+    label?: string
+    buildingNameNumber?: string
+    lat?: number
+    lng?: number
+  }
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }
@@ -113,6 +120,10 @@ function householdCollection(userId: string, name: string) {
 
 function asString(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback
+}
+
+function isNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
 }
 
 function toDateOnly(value: string) {
@@ -185,6 +196,11 @@ function normalizePantryItem(id: string, data: DocumentData): PantryItem {
 }
 
 function normalizeActionItem(id: string, data: DocumentData): ActionItem {
+  const pickupLocation =
+    data.pickupLocation && typeof data.pickupLocation === 'object'
+      ? (data.pickupLocation as Record<string, unknown>)
+      : null
+
   return {
     id,
     type: asString(data.type, 'donation') as HouseholdActionType,
@@ -198,6 +214,15 @@ function normalizeActionItem(id: string, data: DocumentData): ActionItem {
     pickupDate: asString(data.pickupDate),
     status: asString(data.status, 'Pending') as ActionStatus,
     notificationRead: data.notificationRead === true,
+    pickupLocation: pickupLocation
+      ? {
+          label: asString(pickupLocation.label) || undefined,
+          buildingNameNumber:
+            asString(pickupLocation.buildingNameNumber) || undefined,
+          lat: isNumber(pickupLocation.lat) ? pickupLocation.lat : undefined,
+          lng: isNumber(pickupLocation.lng) ? pickupLocation.lng : undefined,
+        }
+      : undefined,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
   }
@@ -413,7 +438,7 @@ export function displayDate(value: string) {
 }
 
 export function useHouseholdBackend() {
-  const { currentUser } = useAuth()
+  const { currentUser, userData } = useAuth()
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([])
   const [actions, setActions] = useState<ActionItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -775,6 +800,20 @@ export function useHouseholdBackend() {
     }
 
     try {
+      const latestUserDoc = await getDoc(doc(db, 'users', currentUser.uid))
+      const latestUserData = latestUserDoc.exists()
+        ? latestUserDoc.data()
+        : userData
+      const pickupLocation =
+        isNumber(latestUserData?.lat) && isNumber(latestUserData?.lng)
+          ? {
+              label: asString(latestUserData?.location),
+              buildingNameNumber: asString(latestUserData?.buildingNameNumber),
+              lat: latestUserData.lat,
+              lng: latestUserData.lng,
+            }
+          : null
+
       await addDoc(householdCollection(currentUser.uid, 'householdActions'), {
         type: input.type,
         pantryItemId: input.pantryItemId ?? null,
@@ -784,6 +823,7 @@ export function useHouseholdBackend() {
         partner: input.partner || 'Partner pending',
         partnerUserId: null,
         pickupDate: input.pickupDate || defaultPickupDate(),
+        pickupLocation,
         status: 'Pending',
         notificationRead: false,
         createdAt: serverTimestamp(),

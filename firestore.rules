@@ -60,6 +60,9 @@ service cloud.firestore {
           'email',
           'emailVerified',
           'location',
+          'buildingNameNumber',
+          'lat',
+          'lng',
           'organizationName',
           'organizationType',
           'registrationNumber',
@@ -97,8 +100,25 @@ service cloud.firestore {
         && request.resource.data.status in ['Confirmed', 'Collected']
         && (
           !('partnerUserId' in resource.data)
+          || resource.data.partnerUserId == null
           || resource.data.partnerUserId == request.auth.uid
         );
+    }
+
+    function partnerDeclineUpdateOnly() {
+      return isApprovedPartnerFor(resource.data.type)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['declinedPartnerIds', 'updatedAt'])
+        && (
+          !('partnerUserId' in resource.data)
+          || resource.data.partnerUserId == null
+        )
+        && (
+          !('declinedPartnerIds' in resource.data)
+          || request.resource.data.declinedPartnerIds
+            .hasAll(resource.data.declinedPartnerIds)
+        )
+        && request.auth.uid in request.resource.data.declinedPartnerIds;
     }
 
     match /users/{userId} {
@@ -145,7 +165,7 @@ service cloud.firestore {
 
     match /{path=**}/householdActions/{actionId} {
       allow read: if isAdmin() || isApprovedPartnerFor(resource.data.type);
-      allow update: if partnerActionUpdateOnly();
+      allow update: if partnerActionUpdateOnly() || partnerDeclineUpdateOnly();
 
       match /statusHistory/{historyId} {
         allow read: if signedIn();

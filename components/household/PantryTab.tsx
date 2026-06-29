@@ -160,6 +160,8 @@ export function PantryTab() {
   const [formError, setFormError] = useState<string | null>(null)
   const [consumingItem, setConsumingItem] = useState<PantryItem | null>(null)
   const [consumedQuantity, setConsumedQuantity] = useState('')
+  const [disposingItem, setDisposingItem] = useState<PantryItem | null>(null)
+  const [disposeQuantity, setDisposeQuantity] = useState('')
   const formRef = useRef<HTMLFormElement>(null)
   const tableBodyRef = useRef<HTMLTableSectionElement>(null)
   const {
@@ -277,13 +279,14 @@ export function PantryTab() {
   const handleFlag = async (
     item: PantryItem,
     type: 'donation' | 'disposal',
+    quantity = item.quantity,
   ) => {
     try {
       await flagAction({
         type,
         pantryItemId: item.id,
         name: item.name,
-        quantity: item.quantity,
+        quantity,
       })
       showNotice(
         type === 'donation'
@@ -295,6 +298,45 @@ export function PantryTab() {
         err instanceof Error ? err.message : 'Could not create that request.',
       )
     }
+  }
+
+  const handleDisposeClick = async (item: PantryItem) => {
+    if (item.status === 'Expired') {
+      await handleFlag(item, 'disposal', item.quantity)
+      return
+    }
+
+    const isFresh =
+      item.itemKind === 'fresh' ||
+      item.category === 'Vegetables' ||
+      item.category === 'Fruits' ||
+      item.category === 'Proteins'
+
+    if (
+      isFresh &&
+      !window.confirm(
+        `${item.name} is not expired yet. Are you sure you want to dispose it?`,
+      )
+    ) {
+      return
+    }
+
+    setDisposingItem(item)
+    setDisposeQuantity('')
+    setFormError(null)
+  }
+
+  const submitDisposeQuantity = async () => {
+    if (!disposingItem) return
+    if (!disposeQuantity.trim()) {
+      setFormError('Enter how much you want to dispose.')
+      return
+    }
+
+    await handleFlag(disposingItem, 'disposal', disposeQuantity.trim())
+    setDisposingItem(null)
+    setDisposeQuantity('')
+    setFormError(null)
   }
 
   const handleConsumed = async (item: PantryItem) => {
@@ -686,7 +728,7 @@ export function PantryTab() {
                       <button
                         disabled={hasDisposal}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-red-700 border border-red-100 hover:bg-red-50 rounded-md transition-colors disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
-                        onClick={() => handleFlag(item, 'disposal')}
+                        onClick={() => handleDisposeClick(item)}
                         aria-label={`Dispose ${item.name}`}
                       >
                         <Recycle className="w-4 h-4" />
@@ -751,6 +793,49 @@ export function PantryTab() {
                 className="rounded-lg bg-wastewise-green px-4 py-2 text-sm font-bold text-white hover:bg-green-800"
               >
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {disposingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-extrabold text-gray-900">
+              Dispose quantity
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Available: {disposingItem.quantity}
+            </p>
+            <input
+              autoFocus
+              value={disposeQuantity}
+              onChange={(event) => setDisposeQuantity(event.target.value)}
+              placeholder={`Amount to dispose, e.g. ${disposingItem.quantity}`}
+              className="mt-4 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-wastewise-green focus:outline-none focus:ring-2 focus:ring-wastewise-green/20"
+            />
+            {formError && (
+              <div className="mt-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                {formError}
+              </div>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDisposingItem(null)
+                  setFormError(null)
+                }}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitDisposeQuantity}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700"
+              >
+                Send to disposal
               </button>
             </div>
           </div>
