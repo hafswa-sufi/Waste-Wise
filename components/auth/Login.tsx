@@ -17,7 +17,7 @@ export function Login({ onSignupClick }: LoginProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [accountType, setAccountType] = useState<
-    'household' | 'ngo' | 'recycling'
+    'household' | 'ngo' | 'recycling' | 'admin'
   >('household')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -29,9 +29,15 @@ export function Login({ onSignupClick }: LoginProps) {
       ? 'Household'
       : accountType === 'ngo'
         ? 'NGO'
-        : 'RecyclingFirm'
+        : accountType === 'recycling'
+          ? 'RecyclingFirm'
+          : 'Admin'
 
   const navigateByRole = (role: string) => {
+    if (role === 'Admin') {
+      navigate('/admin')
+      return
+    }
     if (role === 'NGO') {
       navigate('/dashboard')
       return
@@ -86,6 +92,12 @@ export function Login({ onSignupClick }: LoginProps) {
   const handleGoogleLogin = async () => {
     setError(null)
     setMessage(null)
+
+    if (accountType === 'admin') {
+      setError('Admin accounts must use email and password login.')
+      return
+    }
+
     setIsLoading(true)
 
     try {
@@ -141,7 +153,11 @@ export function Login({ onSignupClick }: LoginProps) {
               value={accountType}
               onChange={(e) =>
                 setAccountType(
-                  e.target.value as 'household' | 'ngo' | 'recycling',
+                  e.target.value as
+                    | 'household'
+                    | 'ngo'
+                    | 'recycling'
+                    | 'admin',
                 )
               }
               className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
@@ -149,7 +165,13 @@ export function Login({ onSignupClick }: LoginProps) {
               <option value="household">Household</option>
               <option value="ngo">NGO</option>
               <option value="recycling">Recycling Company</option>
+              <option value="admin">Admin</option>
             </select>
+            {accountType === 'admin' && (
+              <p className="mt-2 text-xs font-semibold text-gray-500">
+                Admin accounts are created in Firebase by project owners.
+              </p>
+            )}
           </div>
 
           <div>
@@ -218,10 +240,12 @@ export function Login({ onSignupClick }: LoginProps) {
           <button
             type="button"
             onClick={handleGoogleLogin}
-            disabled={isLoading}
+            disabled={isLoading || accountType === 'admin'}
             className="w-full py-3.5 bg-white border border-gray-300 text-gray-800 rounded-xl font-bold text-lg hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-60"
           >
-            Continue with Google
+            {accountType === 'admin'
+              ? 'Google unavailable for Admin'
+              : 'Continue with Google'}
           </button>
 
           <button

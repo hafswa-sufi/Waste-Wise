@@ -160,6 +160,11 @@ export const signInWithGoogle = async (
     const userRef = doc(db, 'users', user.uid)
     const userDoc = await getDoc(userRef)
 
+    if (roleForNewUser === 'Admin' && !userDoc.exists()) {
+      await signOut(auth)
+      throw new Error('Admin accounts must be provisioned before login.')
+    }
+
     if (!userDoc.exists()) {
       await setDoc(userRef, {
         userId: user.uid,
