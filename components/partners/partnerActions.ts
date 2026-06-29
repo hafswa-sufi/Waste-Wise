@@ -4,11 +4,13 @@ import {
   arrayUnion,
   collection,
   collectionGroup,
+  doc,
   onSnapshot,
   query,
   serverTimestamp,
   updateDoc,
   where,
+  writeBatch,
   type DocumentReference,
   type Timestamp,
 } from 'firebase/firestore'
@@ -32,6 +34,9 @@ export interface PartnerAction {
   quantity: string
   partner: string
   partnerUserId?: string | null
+  batchId?: string | null
+  batchArea?: string | null
+  batchAssignedAt?: Timestamp
   pickupDate: string
   status: PartnerActionStatus
   notificationRead?: boolean
@@ -44,6 +49,19 @@ export interface PartnerAction {
   }
   createdAt?: Timestamp
   updatedAt?: Timestamp
+}
+
+export interface PartnerActionBatch {
+  key: string
+  batchId?: string | null
+  area: string
+  requestCount: number
+  householdCount: number
+  totalQuantity: number
+  mappedCount: number
+  nextPickupDate: string
+  status: PartnerActionStatus
+  items: PartnerAction[]
 }
 
 function asString(value: unknown, fallback = '') {
@@ -74,6 +92,9 @@ function normalizePartnerAction(
     quantity: asString(data.quantity, '1 item'),
     partner: asString(data.partner, 'Partner pending'),
     partnerUserId: asString(data.partnerUserId) || null,
+    batchId: asString(data.batchId) || null,
+    batchArea: asString(data.batchArea) || null,
+    batchAssignedAt: data.batchAssignedAt as Timestamp | undefined,
     pickupDate: asString(data.pickupDate),
     status: asString(data.status, 'Pending') as PartnerActionStatus,
     notificationRead: data.notificationRead === true,
@@ -121,6 +142,91 @@ export function parseQuantityValue(value: string) {
   if (!match) return 0
   const amount = Number(match[1])
   return Number.isFinite(amount) ? amount : 0
+}
+
+function pickupArea(action: PartnerAction) {
+  return (
+    action.batchArea ||
+    action.pickupLocation?.buildingNameNumber ||
+    action.pickupLocation?.label ||
+    'No pickup area saved'
+  )
+}
+
+export function groupPartnerBatches(
+  actions: PartnerAction[],
+): PartnerActionBatch[] {
+  const groups = new Map<
+    string,
+    {
+      batchId?: string | null
+      area: string
+      households: Set<string>
+      totalQuantity: number
+      mappedCount: number
+      pickupDates: string[]
+      items: PartnerAction[]
+    }
+  >()
+
+  actions.forEach((action) => {
+    const area = pickupArea(action)
+    const key =
+      action.batchId ||
+      `${action.type}:${area.toLowerCase()}:${action.pickupDate || 'unscheduled'}`
+    const existing =
+      groups.get(key) ??
+      {
+        batchId: action.batchId,
+        area,
+        households: new Set<string>(),
+        totalQuantity: 0,
+        mappedCount: 0,
+        pickupDates: [],
+        items: [],
+      }
+
+    existing.households.add(action.householdId)
+    existing.totalQuantity += parseQuantityValue(action.quantity)
+    existing.items.push(action)
+    if (action.pickupDate) existing.pickupDates.push(action.pickupDate)
+    if (
+      typeof action.pickupLocation?.lat === 'number' &&
+      typeof action.pickupLocation?.lng === 'number'
+    ) {
+      existing.mappedCount += 1
+    }
+
+    groups.set(key, existing)
+  })
+
+  return Array.from(groups.entries())
+    .map(([key, group]) => {
+      const hasOpenItems = group.items.some(
+        (item) => item.status !== 'Collected',
+      )
+      const status: PartnerActionStatus = hasOpenItems
+        ? 'Confirmed'
+        : 'Collected'
+
+      return {
+        key,
+        batchId: group.batchId,
+        area: group.area,
+        requestCount: group.items.length,
+        householdCount: group.households.size,
+        totalQuantity: group.totalQuantity,
+        mappedCount: group.mappedCount,
+        nextPickupDate: group.pickupDates.sort()[0] || 'Not scheduled',
+        status,
+        items: group.items,
+      }
+    })
+    .sort((a, b) => {
+      const statusDiff = statusRank(a.status) - statusRank(b.status)
+      if (statusDiff !== 0) return statusDiff
+      return b.requestCount - a.requestCount
+    })
 }
 
 export function usePartnerActions(type: 'donation' | 'disposal') {
@@ -232,6 +338,32 @@ export function usePartnerActions(type: 'donation' | 'disposal') {
     await writeStatusHistory(action, action.status, 'Collected')
   }
 
+  async function markBatchCollected(batch: PartnerActionBatch) {
+    if (!currentUser || !userData) throw new Error('Please log in again.')
+
+    const openItems = batch.items.filter((item) => item.status !== 'Collected')
+    if (openItems.length === 0) return
+
+    const firestoreBatch = writeBatch(db)
+    openItems.forEach((action) => {
+      firestoreBatch.update(action.ref, {
+        status: 'Collected',
+        collectedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+      firestoreBatch.set(doc(collection(action.ref, 'statusHistory')), {
+        previousStatus: action.status,
+        status: 'Collected',
+        changedByUserId: currentUser.uid,
+        changedByRole: userData.role,
+        notes: `Partner marked ${batch.area} batch as collected.`,
+        changedAt: serverTimestamp(),
+      })
+    })
+
+    await firestoreBatch.commit()
+  }
+
   async function declineAction(action: PartnerAction) {
     if (!currentUser || !userData) throw new Error('Please log in again.')
     if (action.partnerUserId) {
@@ -262,5 +394,6 @@ export function usePartnerActions(type: 'donation' | 'disposal') {
     acceptAction,
     declineAction,
     markCollected,
+    markBatchCollected,
   }
 }

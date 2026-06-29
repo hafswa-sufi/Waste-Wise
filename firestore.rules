@@ -39,6 +39,21 @@ service cloud.firestore {
         && userDoc(request.auth.uid).data.approvalStatus == 'approved';
     }
 
+    function isApprovedPartnerUserFor(partnerUserId, actionType) {
+      return partnerUserId is string
+        && exists(/databases/$(database)/documents/users/$(partnerUserId))
+        && (
+          (
+            actionType == 'donation'
+            && userDoc(partnerUserId).data.role == 'NGO'
+          ) || (
+            actionType == 'disposal'
+            && userDoc(partnerUserId).data.role == 'RecyclingFirm'
+          )
+        )
+        && userDoc(partnerUserId).data.approvalStatus == 'approved';
+    }
+
     function isValidSignupRole(role) {
       return role in ['Household', 'NGO', 'RecyclingFirm'];
     }
@@ -121,6 +136,36 @@ service cloud.firestore {
         && request.auth.uid in request.resource.data.declinedPartnerIds;
     }
 
+    function adminActionAssignmentUpdateOnly() {
+      return isAdmin()
+        && resource.data.type in ['donation', 'disposal']
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly([
+            'batchId',
+            'batchArea',
+            'batchAssignedAt',
+            'batchRequestCount',
+            'partner',
+            'partnerUserId',
+            'status',
+            'confirmedAt',
+            'updatedAt'
+          ])
+        && request.resource.data.status == 'Confirmed'
+        && request.resource.data.batchId is string
+        && request.resource.data.batchArea is string
+        && request.resource.data.batchRequestCount is number
+        && isApprovedPartnerUserFor(
+          request.resource.data.partnerUserId,
+          resource.data.type
+        )
+        && (
+          !('partnerUserId' in resource.data)
+          || resource.data.partnerUserId == null
+        )
+        && resource.data.status == 'Pending';
+    }
+
     match /users/{userId} {
       allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
 
@@ -165,12 +210,17 @@ service cloud.firestore {
 
     match /{path=**}/householdActions/{actionId} {
       allow read: if isAdmin() || isApprovedPartnerFor(resource.data.type);
-      allow update: if partnerActionUpdateOnly() || partnerDeclineUpdateOnly();
+      allow update: if partnerActionUpdateOnly()
+        || partnerDeclineUpdateOnly()
+        || adminActionAssignmentUpdateOnly();
 
       match /statusHistory/{historyId} {
         allow read: if signedIn();
         allow create: if isApprovedPartnerFor(get(/databases/$(database)/documents/$(path)/householdActions/$(actionId)).data.type)
           && request.resource.data.changedByUserId == request.auth.uid;
+        allow create: if isAdmin()
+          && request.resource.data.changedByUserId == request.auth.uid
+          && request.resource.data.changedByRole == 'Admin';
       }
     }
 

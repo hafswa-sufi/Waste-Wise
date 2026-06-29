@@ -113,14 +113,22 @@ export const signUp = async (
       const safeName = certificateFile.name.replace(/[^a-zA-Z0-9._-]/g, '_')
       const filePath = `partner-certificates/${user.uid}/${Date.now()}-${safeName}`
       const fileRef = ref(storage, filePath)
-      await uploadBytes(fileRef, certificateFile, {
-        contentType: certificateFile.type || 'application/octet-stream',
-      })
       uploadedCertificate = {
         certificateFileName: certificateFile.name,
-        certificateFilePath: filePath,
-        certificateFileUrl: await getDownloadURL(fileRef),
         verificationDocumentStatus: 'submitted',
+      }
+
+      try {
+        await uploadBytes(fileRef, certificateFile, {
+          contentType: certificateFile.type || 'application/octet-stream',
+        })
+        uploadedCertificate = {
+          ...uploadedCertificate,
+          certificateFilePath: filePath,
+          certificateFileUrl: await getDownloadURL(fileRef),
+        }
+      } catch (uploadError) {
+        console.warn('Certificate upload skipped:', uploadError)
       }
     }
 

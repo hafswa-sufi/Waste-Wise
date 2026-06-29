@@ -13,6 +13,7 @@ import {
   type PantryCategory,
   type StorageType,
 } from './householdBackend'
+import { useAuth } from '../../src/context/useAuth'
 
 const produceOptions: Array<{
   value: string
@@ -171,7 +172,36 @@ function inferCustomCategory(name: string, selectedCategory: PantryCategory | 'A
   return 'Vegetables'
 }
 
+interface WeatherContext {
+  temperature: number
+  humidity: number
+  summary: string
+}
+
+function climateAdjustmentDays(
+  weather: WeatherContext | null,
+  storageType: StorageType,
+  category: PantryCategory,
+) {
+  if (!weather || storageType === 'Fridge') return 0
+
+  let adjustment = 0
+  if (weather.temperature >= 30) adjustment -= 2
+  else if (weather.temperature >= 26) adjustment -= 1
+  else if (weather.temperature <= 20 && weather.humidity < 65) adjustment += 1
+
+  if (
+    weather.humidity >= 75 &&
+    (category === 'Vegetables' || category === 'Fruits')
+  ) {
+    adjustment -= 1
+  }
+
+  return adjustment
+}
+
 export function FreshnessTab() {
+  const { userData } = useAuth()
   const { addPantryItem } = useHouseholdBackend()
   const [produce, setProduce] = useState('')
   const [produceSearch, setProduceSearch] = useState('')
@@ -187,6 +217,9 @@ export function FreshnessTab() {
   const [submitted, setSubmitted] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [weather, setWeather] = useState<WeatherContext | null>(null)
+  const [weatherLoading, setWeatherLoading] = useState(false)
+  const [weatherError, setWeatherError] = useState<string | null>(null)
   const resultRef = useRef<HTMLElement>(null)
 
   const filteredProduceOptions = useMemo(
@@ -217,7 +250,13 @@ export function FreshnessTab() {
         shelfLife: categoryShelfLife[customCategory],
       }
     : selectedKnownProduce
-  const estimatedDays = selectedProduce?.shelfLife[storage] ?? 0
+  const baseEstimatedDays = selectedProduce?.shelfLife[storage] ?? 0
+  const weatherAdjustment = selectedProduce
+    ? climateAdjustmentDays(weather, storage, selectedProduce.category)
+    : 0
+  const estimatedDays = selectedProduce
+    ? Math.max(1, baseEstimatedDays + weatherAdjustment)
+    : 0
   const expiryDate = selectedProduce ? addDays(purchaseDate, estimatedDays) : ''
   const remainingDays = selectedProduce ? daysUntil(expiryDate) : 0
   const status =
@@ -239,6 +278,60 @@ export function FreshnessTab() {
     setNotice(message)
     window.setTimeout(() => setNotice(null), 2500)
   }
+
+  useEffect(() => {
+    const lat = typeof userData?.lat === 'number' ? userData.lat : null
+    const lng = typeof userData?.lng === 'number' ? userData.lng : null
+
+    if (lat === null || lng === null) {
+      setWeather(null)
+      setWeatherError('Save a household pickup pin in Profile for local climate adjustment.')
+      return
+    }
+
+    let cancelled = false
+    setWeatherLoading(true)
+    setWeatherError(null)
+
+    fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m&timezone=auto`,
+    )
+      .then((response) => {
+        if (!response.ok) throw new Error('Weather request failed.')
+        return response.json() as Promise<{
+          current?: {
+            temperature_2m?: number
+            relative_humidity_2m?: number
+          }
+        }>
+      })
+      .then((data) => {
+        if (cancelled) return
+        const temperature = Number(data.current?.temperature_2m)
+        const humidity = Number(data.current?.relative_humidity_2m)
+        if (!Number.isFinite(temperature) || !Number.isFinite(humidity)) {
+          throw new Error('Weather data was incomplete.')
+        }
+        setWeather({
+          temperature,
+          humidity,
+          summary: `${Math.round(temperature)}°C, ${Math.round(humidity)}% humidity`,
+        })
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setWeather(null)
+          setWeatherError('Local weather is unavailable, so the standard shelf-life estimate is shown.')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setWeatherLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [userData?.lat, userData?.lng])
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -503,6 +596,13 @@ export function FreshnessTab() {
                   <p className="mt-1 text-2xl font-extrabold text-gray-900">
                     {estimatedDays} days
                   </p>
+                  {weatherAdjustment !== 0 && (
+                    <p className="mt-1 text-xs font-bold text-gray-500">
+                      Base {baseEstimatedDays} days, climate{' '}
+                      {weatherAdjustment > 0 ? '+' : ''}
+                      {weatherAdjustment}
+                    </p>
+                  )}
                 </div>
                 <div className="rounded-lg bg-gray-50 px-4 py-4">
                   <p className="text-xs font-bold uppercase text-gray-400">
@@ -538,7 +638,14 @@ export function FreshnessTab() {
                         ? 'Move this to disposal so it can be handled responsibly.'
                         : status === 'Use Today'
                           ? 'Add this to pantry so alerts can help you use it in time.'
-                          : 'Add this to the pantry so alerts can track it automatically.'}
+                        : 'Add this to the pantry so alerts can track it automatically.'}
+                    </p>
+                    <p className="mt-2 text-xs font-semibold text-gray-500">
+                      {weatherLoading
+                        ? 'Checking local climate...'
+                        : weather
+                          ? `Adjusted using local conditions: ${weather.summary}.`
+                          : weatherError}
                     </p>
                   </div>
                 </div>

@@ -181,7 +181,7 @@ export function Auth() {
         <div ref={containerRef} className="w-full">
           {authError === 'auth-required' && (
             <div className="mx-auto mb-4 max-w-md rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-              Please log in before opening the household dashboard.
+              Please log in before opening that page.
             </div>
           )}
           {authError === 'unauthorized' && (

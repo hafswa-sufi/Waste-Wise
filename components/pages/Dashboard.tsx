@@ -14,9 +14,11 @@ import {
 import { Link, useNavigate } from 'react-router-dom'
 import {
   displayPartnerDate,
+  groupPartnerBatches,
   parseQuantityValue,
   usePartnerActions,
   type PartnerAction,
+  type PartnerActionBatch,
 } from '../partners/partnerActions'
 import { PartnerRequestMap } from '../partners/PartnerRequestMap'
 import { logout } from '../../src/service/authService'
@@ -48,6 +50,7 @@ export function Dashboard() {
     acceptAction,
     declineAction,
     markCollected,
+    markBatchCollected,
   } = usePartnerActions('donation')
   const [viewMode, setViewMode] = useState<ViewMode>('available')
   const [workingId, setWorkingId] = useState<string | null>(null)
@@ -57,6 +60,10 @@ export function Dashboard() {
     viewMode === 'available' ? availableActions : assignedActions
   const mapActions = [...availableActions, ...assignedActions].filter(
     (action) => action.status !== 'Collected',
+  )
+  const assignedBatches = useMemo(
+    () => groupPartnerBatches(assignedActions),
+    [assignedActions],
   )
 
   const stats = useMemo(
@@ -94,6 +101,20 @@ export function Dashboard() {
     } catch (actionError) {
       console.error('NGO action error:', actionError)
       setMessage('Could not update this request. Check your partner permissions.')
+    } finally {
+      setWorkingId(null)
+    }
+  }
+
+  const runBatchAction = async (batch: PartnerActionBatch) => {
+    setWorkingId(batch.key)
+    setMessage(null)
+    try {
+      await markBatchCollected(batch)
+      setMessage(`${batch.area} batch marked as collected.`)
+    } catch (actionError) {
+      console.error('NGO batch action error:', actionError)
+      setMessage('Could not update this batch. Check your partner permissions.')
     } finally {
       setWorkingId(null)
     }
@@ -260,6 +281,89 @@ export function Dashboard() {
               <RefreshCw className="h-5 w-5 animate-spin" />
               Loading donation requests...
             </div>
+          </div>
+        ) : viewMode === 'assigned' && assignedBatches.length === 0 ? (
+          <div className="rounded-lg border border-gray-200 bg-white px-6 py-12 text-center">
+            <Package className="mx-auto h-10 w-10 text-gray-300" />
+            <h2 className="mt-3 text-lg font-extrabold text-gray-900">
+              No assigned donation batches
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Admin-assigned donation batches will appear here.
+            </p>
+          </div>
+        ) : viewMode === 'assigned' ? (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {assignedBatches.map((batch) => (
+              <article
+                key={batch.key}
+                className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <span className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-bold text-green-700">
+                      Donation batch
+                    </span>
+                    <h2 className="mt-2 text-lg font-extrabold text-gray-900">
+                      {batch.area}
+                    </h2>
+                    <p className="mt-1 text-sm font-semibold text-gray-500">
+                      {batch.householdCount} household
+                      {batch.householdCount === 1 ? '' : 's'} -{' '}
+                      {batch.requestCount} request
+                      {batch.requestCount === 1 ? '' : 's'}
+                    </p>
+                  </div>
+                  <span
+                    className={`rounded-full border px-2.5 py-1 text-xs font-bold ${statusClass(
+                      batch.status,
+                    )}`}
+                  >
+                    {batch.status}
+                  </span>
+                </div>
+
+                <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Package className="h-4 w-4 text-gray-400" />
+                    <span>{batch.totalQuantity} approx. qty</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Calendar className="h-4 w-4 text-gray-400" />
+                    <span>{displayPartnerDate(batch.nextPickupDate)}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-600 sm:col-span-2">
+                    <Users className="h-4 w-4 text-gray-400" />
+                    <span>{batch.mappedCount} mapped pickup pins</span>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {batch.items.slice(0, 5).map((item) => (
+                    <span
+                      key={`${batch.key}-${item.id}`}
+                      className="rounded-full bg-gray-50 px-2 py-1 text-xs font-bold text-gray-600 ring-1 ring-gray-200"
+                    >
+                      {item.name}: {item.quantity}
+                    </span>
+                  ))}
+                </div>
+
+                {batch.status !== 'Collected' && (
+                  <div className="mt-5 flex justify-end">
+                    <button
+                      type="button"
+                      disabled={workingId === batch.key}
+                      onClick={() => runBatchAction(batch)}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-wastewise-green px-4 py-2 text-sm font-bold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      Mark Batch Collected
+                    </button>
+                  </div>
+                )}
+              </article>
+            ))}
           </div>
         ) : activeActions.length === 0 ? (
           <div className="rounded-lg border border-gray-200 bg-white px-6 py-12 text-center">
