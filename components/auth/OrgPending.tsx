@@ -15,20 +15,19 @@ export function OrgPending() {
       </div>
 
       <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight mb-4">
-        Application Submitted
+        Approval Pending
       </h2>
 
       <p className="text-gray-600 text-lg mb-8 leading-relaxed">
-        Thank you for registering with WasteWise. Your application is currently
-        under review by our team.
+        Your partner account has been created, but an admin still needs to approve it before you can access the dashboard.
       </p>
 
       <div className="bg-gray-50 rounded-xl p-6 mb-10 border border-gray-100">
         <p className="text-sm text-gray-700 font-medium">
-          Estimated review time:
+          What happens next:
           <br />
           <span className="text-lg font-bold text-gray-900 mt-1 block">
-            Within 48 hours
+            Admin approval required
           </span>
         </p>
       </div>
@@ -42,3 +41,4 @@ export function OrgPending() {
     </div>
   )
 }
+

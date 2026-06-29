@@ -7,6 +7,7 @@ import { HouseholdProfile } from '../components/pages/HouseholdProfile'
 import { Auth } from '../components/pages/Auth'
 import { Recycling } from '../components/pages/Recycling'
 import { Admin } from '../components/pages/Admin'
+import { PartnerProfile } from '../components/pages/PartnerProfile'
 import { AuthProvider } from './context/AuthContext'
 import { RequireAuth } from './components/RequireAuth'
 
@@ -54,6 +55,14 @@ function App() {
             element={
               <RequireAuth allowedRoles={['RecyclingFirm']}>
                 <Recycling />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/partner/profile"
+            element={
+              <RequireAuth allowedRoles={['NGO', 'RecyclingFirm']}>
+                <PartnerProfile />
               </RequireAuth>
             }
           />

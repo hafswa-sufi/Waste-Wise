@@ -12,13 +12,13 @@ interface LoginProps {
   onSignupClick: () => void
 }
 
+type LoginAccountType = 'household' | 'ngo' | 'recycling' | 'admin'
+
 export function Login({ onSignupClick }: LoginProps) {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [accountType, setAccountType] = useState<
-    'household' | 'ngo' | 'recycling' | 'admin'
-  >('household')
+  const [accountType, setAccountType] = useState<LoginAccountType>('household')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -151,15 +151,7 @@ export function Login({ onSignupClick }: LoginProps) {
             </label>
             <select
               value={accountType}
-              onChange={(e) =>
-                setAccountType(
-                  e.target.value as
-                    | 'household'
-                    | 'ngo'
-                    | 'recycling'
-                    | 'admin',
-                )
-              }
+              onChange={(e) => setAccountType(e.target.value as LoginAccountType)}
               className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
             >
               <option value="household">Household</option>
@@ -193,12 +185,11 @@ export function Login({ onSignupClick }: LoginProps) {
               <label className="block text-sm font-bold text-gray-700">
                 Password
               </label>
-             <button
+              <button
                 type="button"
                 onClick={handlePasswordReset}
                 className="text-sm font-bold text-wastewise-green hover:underline"
               >
-                
                 Forgot Password?
               </button>
             </div>

@@ -9,7 +9,7 @@ import {
   RefreshCw,
   Users,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   displayPartnerDate,
   parseQuantityValue,
@@ -113,6 +113,12 @@ export function Dashboard() {
                 Donation Partner
               </p>
             </div>
+            <Link
+              to="/partner/profile"
+              className="hidden rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-600 hover:bg-gray-50 sm:inline-flex"
+            >
+              Settings
+            </Link>
             <button
               type="button"
               onClick={handleLogout}
@@ -316,3 +322,7 @@ export function Dashboard() {
     </div>
   )
 }
+
+
+
+

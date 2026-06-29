@@ -98,3 +98,4 @@ export function RequireAuth({ children, allowedRoles }: RequireAuthProps) {
 
   return <>{children}</>
 }
+
