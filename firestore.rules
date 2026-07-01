@@ -109,6 +109,7 @@ service cloud.firestore {
           .hasOnly([
             'partner',
             'partnerUserId',
+            'pickupDate',
             'status',
             'routingStatus',
             'confirmedAt',

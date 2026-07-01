@@ -62,6 +62,10 @@ export function Recycling() {
   const [workingId, setWorkingId] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [schedulingAction, setSchedulingAction] = useState<PartnerAction | null>(
+    null,
+  )
+  const [scheduleDate, setScheduleDate] = useState('')
   const [selectedAction, setSelectedAction] = useState<PartnerAction | null>(
     null,
   )
@@ -118,6 +122,30 @@ export function Recycling() {
     } finally {
       setWorkingId(null)
     }
+  }
+
+  const openScheduleDialog = (action: PartnerAction) => {
+    setSchedulingAction(action)
+    setScheduleDate(action.pickupDate || new Date().toISOString().slice(0, 10))
+    setActionError(null)
+  }
+
+  const submitSchedule = async () => {
+    if (!schedulingAction) return
+    if (!scheduleDate) {
+      setActionError('Choose the pickup date before scheduling this collection.')
+      return
+    }
+
+    await runAction(
+      schedulingAction,
+      (selectedAction) => acceptAction(selectedAction, scheduleDate),
+      `${schedulingAction.name} pickup scheduled for ${displayPartnerDate(
+        scheduleDate,
+      )}. It is now visible on your map.`,
+      'map',
+    )
+    setSchedulingAction(null)
   }
 
   const runBatchAction = async (batch: PartnerActionBatch) => {
@@ -504,14 +532,7 @@ export function Recycling() {
                       <button
                         type="button"
                         disabled={workingId === action.id}
-                        onClick={() =>
-                          runAction(
-                            action,
-                            acceptAction,
-                            `${action.name} pickup scheduled. It is now visible on your map.`,
-                            'map',
-                          )
-                        }
+                        onClick={() => openScheduleDialog(action)}
                         className="inline-flex items-center justify-center gap-2 rounded-lg bg-wastewise-green px-4 py-2 text-sm font-bold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <CheckCircle2 className="h-4 w-4" />
@@ -548,6 +569,44 @@ export function Recycling() {
           onClose={() => setSelectedAction(null)}
           tone="disposal"
         />
+      )}
+      {schedulingAction && (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-gray-900/40 px-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-extrabold text-gray-900">
+              Schedule pickup
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Choose when your company will collect {schedulingAction.name}.
+            </p>
+            <label className="mt-4 block text-sm font-bold text-gray-700">
+              Pickup date
+              <input
+                type="date"
+                value={scheduleDate}
+                onChange={(event) => setScheduleDate(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-wastewise-green focus:outline-none focus:ring-2 focus:ring-wastewise-green/20"
+              />
+            </label>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSchedulingAction(null)}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitSchedule}
+                disabled={workingId === schedulingAction.id}
+                className="rounded-lg bg-wastewise-green px-4 py-2 text-sm font-bold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Save schedule
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

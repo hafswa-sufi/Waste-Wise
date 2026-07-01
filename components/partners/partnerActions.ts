@@ -502,15 +502,17 @@ export function usePartnerActions(type: 'donation' | 'disposal') {
     }
   }
 
-  async function acceptAction(action: PartnerAction) {
+  async function acceptAction(action: PartnerAction, scheduledDate?: string) {
     if (!currentUser || !userData) throw new Error('Please log in again.')
 
     const partnerName =
       userData.organizationName || userData.name || 'Approved partner'
+    const pickupDate = scheduledDate || action.pickupDate
 
     await updateDoc(action.ref, {
       partner: partnerName,
       partnerUserId: currentUser.uid,
+      pickupDate,
       status: 'Confirmed',
       routingStatus: 'accepted',
       confirmedAt: serverTimestamp(),
