@@ -242,7 +242,7 @@ export function partnerActionErrorMessage(error: unknown, actionLabel: string) {
     return 'The connection dropped before the update finished. Check your internet and try again.'
   }
 
-  return `This ${actionLabel} could not be updated. It may already have been changed, cancelled, or assigned elsewhere.`
+  return `This ${actionLabel} could not be updated. Refresh the page and confirm it is still assigned to your organisation before trying again.`
 }
 
 function distanceKm(aLat: number, aLng: number, bLat: number, bLng: number) {
@@ -530,6 +530,32 @@ export function usePartnerActions(type: 'donation' | 'disposal') {
     await writeStatusHistory(action, action.status, 'Collected')
   }
 
+  async function updatePickupDate(action: PartnerAction, pickupDate: string) {
+    if (!pickupDate) throw new Error('Choose a pickup date first.')
+    await updateDoc(action.ref, {
+      pickupDate,
+      updatedAt: serverTimestamp(),
+    })
+  }
+
+  async function updateBatchPickupDate(
+    batch: PartnerActionBatch,
+    pickupDate: string,
+  ) {
+    if (!pickupDate) throw new Error('Choose a pickup date first.')
+    const openItems = batch.items.filter((item) => item.status !== 'Collected')
+    if (openItems.length === 0) return
+
+    const firestoreBatch = writeBatch(db)
+    openItems.forEach((action) => {
+      firestoreBatch.update(action.ref, {
+        pickupDate,
+        updatedAt: serverTimestamp(),
+      })
+    })
+    await firestoreBatch.commit()
+  }
+
   async function markBatchCollected(batch: PartnerActionBatch) {
     if (!currentUser || !userData) throw new Error('Please log in again.')
 
@@ -597,5 +623,7 @@ export function usePartnerActions(type: 'donation' | 'disposal') {
     declineAction,
     markCollected,
     markBatchCollected,
+    updatePickupDate,
+    updateBatchPickupDate,
   }
 }

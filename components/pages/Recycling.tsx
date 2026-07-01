@@ -57,6 +57,8 @@ export function Recycling() {
     declineAction,
     markCollected,
     markBatchCollected,
+    updatePickupDate,
+    updateBatchPickupDate,
   } = usePartnerActions('disposal')
   const [viewMode, setViewMode] = useState<ViewMode>('available')
   const [workingId, setWorkingId] = useState<string | null>(null)
@@ -69,6 +71,7 @@ export function Recycling() {
   const [selectedAction, setSelectedAction] = useState<PartnerAction | null>(
     null,
   )
+  const [pickupDates, setPickupDates] = useState<Record<string, string>>({})
 
   const stats = useMemo(
     () => ({
@@ -157,6 +160,31 @@ export function Recycling() {
       setMessage(`${batch.area} batch marked as collected.`)
     } catch (actionError) {
       console.error('Recycling batch action error:', actionError)
+      setActionError(
+        partnerActionErrorMessage(actionError, 'disposal collection batch'),
+      )
+    } finally {
+      setWorkingId(null)
+    }
+  }
+
+  const selectedPickupDate = (id: string, fallback: string) =>
+    pickupDates[id] ?? fallback
+
+  const setSelectedPickupDate = (id: string, value: string) => {
+    setPickupDates((current) => ({ ...current, [id]: value }))
+  }
+
+  const runBatchScheduleUpdate = async (batch: PartnerActionBatch) => {
+    const pickupDate = selectedPickupDate(batch.key, batch.nextPickupDate)
+    setWorkingId(batch.key)
+    setMessage(null)
+    setActionError(null)
+    try {
+      await updateBatchPickupDate(batch, pickupDate)
+      setMessage(`${batch.area} batch pickup date updated.`)
+    } catch (actionError) {
+      console.error('Recycling batch schedule error:', actionError)
       setActionError(
         partnerActionErrorMessage(actionError, 'disposal collection batch'),
       )
@@ -422,6 +450,35 @@ export function Recycling() {
                   </div>
                 </div>
 
+                {batch.status !== 'Collected' && (
+                  <div className="mt-5 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                    <label className="text-xs font-bold uppercase text-gray-500">
+                      Batch pickup date
+                    </label>
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                      <input
+                        type="date"
+                        value={selectedPickupDate(
+                          batch.key,
+                          batch.nextPickupDate,
+                        )}
+                        onChange={(event) =>
+                          setSelectedPickupDate(batch.key, event.target.value)
+                        }
+                        className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700"
+                      />
+                      <button
+                        type="button"
+                        disabled={workingId === batch.key}
+                        onClick={() => runBatchScheduleUpdate(batch)}
+                        className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Update Schedule
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="mt-4 flex flex-wrap gap-2">
                   {batch.items.slice(0, 5).map((item) => (
                     <span
@@ -503,6 +560,22 @@ export function Recycling() {
                   </div>
                 </div>
 
+                {(action.status === 'Assigned' || action.status === 'Pending') && (
+                  <div className="mt-5 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                    <label className="text-xs font-bold uppercase text-gray-500">
+                      Pickup date
+                    </label>
+                    <input
+                      type="date"
+                      value={selectedPickupDate(action.id, action.pickupDate)}
+                      onChange={(event) =>
+                        setSelectedPickupDate(action.id, event.target.value)
+                      }
+                      className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700"
+                    />
+                  </div>
+                )}
+
                 <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
                   <button
                     type="button"
@@ -541,21 +614,52 @@ export function Recycling() {
                     </>
                   )}
                   {action.status === 'Confirmed' && (
-                    <button
-                      type="button"
-                      disabled={workingId === action.id}
-                      onClick={() =>
-                        runAction(
-                          action,
-                          markCollected,
-                          `${action.name} marked as collected.`,
-                        )
-                      }
-                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-wastewise-green px-4 py-2 text-sm font-bold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      Mark Collected
-                    </button>
+                    <>
+                      <input
+                        type="date"
+                        value={selectedPickupDate(action.id, action.pickupDate)}
+                        onChange={(event) =>
+                          setSelectedPickupDate(action.id, event.target.value)
+                        }
+                        className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700"
+                      />
+                      <button
+                        type="button"
+                        disabled={workingId === action.id}
+                        onClick={() =>
+                          runAction(
+                            action,
+                            (selectedAction) =>
+                              updatePickupDate(
+                                selectedAction,
+                                selectedPickupDate(
+                                  selectedAction.id,
+                                  selectedAction.pickupDate,
+                                ),
+                              ),
+                            `${action.name} pickup date updated.`,
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Update Schedule
+                      </button>
+                      <button
+                        type="button"
+                        disabled={workingId === action.id}
+                        onClick={() =>
+                          runAction(
+                            action,
+                            markCollected,
+                            `${action.name} marked as collected.`,
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-wastewise-green px-4 py-2 text-sm font-bold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                        Mark Collected
+                      </button>
+                    </>
                   )}
                 </div>
               </article>

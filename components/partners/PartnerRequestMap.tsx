@@ -99,8 +99,8 @@ export function PartnerRequestMap({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
-      <div className="h-[520px] overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
+    <div className="relative grid gap-4 lg:grid-cols-[1fr_340px]">
+      <div className="relative z-0 h-[520px] overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
         <MapContainer
           center={center}
           zoom={12}
@@ -170,7 +170,7 @@ export function PartnerRequestMap({
         </MapContainer>
       </div>
 
-      <aside className="rounded-lg border border-gray-200 bg-white p-4">
+      <aside className="relative z-10 rounded-lg border border-gray-200 bg-white p-4">
         <h2 className="text-sm font-extrabold uppercase text-gray-500">
           Mapped Requests
         </h2>

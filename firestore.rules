@@ -111,6 +111,7 @@ service cloud.firestore {
             'partnerUserId',
             'pickupDate',
             'status',
+            'pickupDate',
             'routingStatus',
             'confirmedAt',
             'collectedAt',

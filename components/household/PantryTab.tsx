@@ -839,7 +839,7 @@ export function PantryTab() {
         </div>
       </div>
       {consumingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
             <h2 className="text-lg font-extrabold text-gray-900">
               Record consumption
@@ -882,7 +882,7 @@ export function PantryTab() {
         </div>
       )}
       {donatingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
             <h2 className="text-lg font-extrabold text-gray-900">
               Donation request
@@ -941,7 +941,7 @@ export function PantryTab() {
         </div>
       )}
       {disposingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
             <h2 className="text-lg font-extrabold text-gray-900">
               Dispose quantity

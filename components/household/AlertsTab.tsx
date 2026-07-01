@@ -238,7 +238,7 @@ export function AlertsTab() {
       )}
       {error && <div className="py-10 text-center text-red-600">{error}</div>}
       {consumingAlert && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
             <h2 className="text-lg font-extrabold text-gray-900">
               Record consumption
