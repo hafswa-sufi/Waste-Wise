@@ -54,6 +54,10 @@ export function Auth() {
       operatingCounties: draft.operatingCounties,
       contactName: draft.contactName,
       designation: draft.designation,
+      serviceBaseAddress: draft.serviceBaseAddress,
+      lat: draft.lat,
+      lng: draft.lng,
+      maxPickupRadiusKm: draft.maxPickupRadiusKm,
       verificationDocumentStatus: 'not_submitted',
     })
     transitionTo('org-pending')
@@ -76,6 +80,10 @@ export function Auth() {
         operatingCounties: orgSignupDraft.operatingCounties,
         contactName: orgSignupDraft.contactName,
         designation: orgSignupDraft.designation,
+        serviceBaseAddress: orgSignupDraft.serviceBaseAddress,
+        lat: orgSignupDraft.lat,
+        lng: orgSignupDraft.lng,
+        maxPickupRadiusKm: orgSignupDraft.maxPickupRadiusKm,
         certificateFileName: certificateFile?.name,
         verificationDocumentStatus: certificateFile
           ? 'submitted'

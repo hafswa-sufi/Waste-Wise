@@ -16,6 +16,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   displayPartnerDate,
   groupPartnerBatches,
+  partnerActionErrorMessage,
   parseQuantityValue,
   usePartnerActions,
   type PartnerAction,
@@ -30,6 +31,7 @@ type ViewMode = 'available' | 'assigned' | 'map' | 'reports'
 function statusClass(status: PartnerAction['status']) {
   switch (status) {
     case 'Pending':
+    case 'Assigned':
       return 'bg-yellow-50 text-yellow-800 border-yellow-200'
     case 'Confirmed':
       return 'bg-blue-50 text-blue-700 border-blue-200'
@@ -101,7 +103,7 @@ export function Recycling() {
       if (nextView) setViewMode(nextView)
     } catch (actionError) {
       console.error('Recycling action error:', actionError)
-      setMessage('Could not update this collection. Check your partner permissions.')
+      setMessage(partnerActionErrorMessage(actionError, 'disposal collection'))
     } finally {
       setWorkingId(null)
     }
@@ -115,7 +117,9 @@ export function Recycling() {
       setMessage(`${batch.area} batch marked as collected.`)
     } catch (actionError) {
       console.error('Recycling batch action error:', actionError)
-      setMessage('Could not update this batch. Check your partner permissions.')
+      setMessage(
+        partnerActionErrorMessage(actionError, 'disposal collection batch'),
+      )
     } finally {
       setWorkingId(null)
     }
@@ -432,7 +436,7 @@ export function Recycling() {
                 </div>
 
                 <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
-                  {!action.partnerUserId && (
+                  {action.status === 'Assigned' && (
                     <>
                       <button
                         type="button"
@@ -456,8 +460,8 @@ export function Recycling() {
                           runAction(
                             action,
                             acceptAction,
-                            `${action.name} collection accepted.`,
-                            'assigned',
+                            `${action.name} collection accepted. It is now visible on your map.`,
+                            'map',
                           )
                         }
                         className="inline-flex items-center justify-center gap-2 rounded-lg bg-wastewise-green px-4 py-2 text-sm font-bold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
@@ -467,7 +471,7 @@ export function Recycling() {
                       </button>
                     </>
                   )}
-                  {action.partnerUserId && action.status !== 'Collected' && (
+                  {action.status === 'Confirmed' && (
                     <button
                       type="button"
                       disabled={workingId === action.id}

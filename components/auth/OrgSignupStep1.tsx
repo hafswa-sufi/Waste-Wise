@@ -11,6 +11,10 @@ export interface OrgSignupDraft {
   designation: string
   workEmail: string
   password: string
+  serviceBaseAddress: string
+  lat: number
+  lng: number
+  maxPickupRadiusKm: number
 }
 interface OrgSignupStep1Props {
   orgType: 'NGO' | 'Recycling Company'
@@ -28,7 +32,42 @@ export function OrgSignupStep1({
   const [error, setError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const resolveServiceLocation = async (formData: FormData) => {
+    const serviceBaseAddress = String(
+      formData.get('serviceBaseAddress') || '',
+    ).trim()
+    const operatingCounties = String(formData.get('operatingCounties') || '').trim()
+    const query = [serviceBaseAddress, operatingCounties, 'Kenya']
+      .filter(Boolean)
+      .join(', ')
+
+    if (!serviceBaseAddress) {
+      throw new Error('Enter the organisation service base or area.')
+    }
+
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ke&q=${encodeURIComponent(
+        query,
+      )}`,
+    )
+    const results = (await response.json()) as Array<{
+      lat?: string
+      lon?: string
+    }>
+    const result = results[0]
+    const lat = Number(result?.lat)
+    const lng = Number(result?.lon)
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw new Error(
+        'Could not find that service location. Try estate, road, town, and county.',
+      )
+    }
+
+    return { serviceBaseAddress, lat, lng }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     const form = e.currentTarget as HTMLFormElement
@@ -37,6 +76,28 @@ export function OrgSignupStep1({
       return
     }
     const formData = new FormData(form)
+    const maxPickupRadiusKm = Number(formData.get('maxPickupRadiusKm'))
+
+    if (!Number.isFinite(maxPickupRadiusKm) || maxPickupRadiusKm <= 0) {
+      setError('Enter a valid pickup radius in kilometres.')
+      return
+    }
+
+    setIsLoading(true)
+    let resolvedLocation: {
+      serviceBaseAddress: string
+      lat: number
+      lng: number
+    }
+    try {
+      resolvedLocation = await resolveServiceLocation(formData)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not find that service location.')
+      setIsLoading(false)
+      return
+    }
+    setIsLoading(false)
+
     onNext({
       organizationName: String(formData.get('organizationName') || '').trim(),
       organizationType: String(formData.get('organizationType') || orgType) as
@@ -48,6 +109,10 @@ export function OrgSignupStep1({
       designation: String(formData.get('designation') || '').trim(),
       workEmail: String(formData.get('workEmail') || '').trim(),
       password: String(formData.get('password') || ''),
+      serviceBaseAddress: resolvedLocation.serviceBaseAddress,
+      lat: resolvedLocation.lat,
+      lng: resolvedLocation.lng,
+      maxPickupRadiusKm,
     })
   }
 
@@ -59,8 +124,16 @@ export function OrgSignupStep1({
       return
     }
     const formData = new FormData(form)
+    const maxPickupRadiusKm = Number(formData.get('maxPickupRadiusKm'))
+
+    if (!Number.isFinite(maxPickupRadiusKm) || maxPickupRadiusKm <= 0) {
+      setError('Enter a valid pickup radius in kilometres.')
+      return
+    }
+
     setIsLoading(true)
     try {
+      const resolvedLocation = await resolveServiceLocation(formData)
       await onGoogleSignup({
         organizationName: String(formData.get('organizationName') || '').trim(),
         organizationType: String(formData.get('organizationType') || orgType) as
@@ -71,6 +144,10 @@ export function OrgSignupStep1({
         contactName: String(formData.get('contactName') || '').trim(),
         designation: String(formData.get('designation') || '').trim(),
         workEmail: String(formData.get('workEmail') || '').trim(),
+        serviceBaseAddress: resolvedLocation.serviceBaseAddress,
+        lat: resolvedLocation.lat,
+        lng: resolvedLocation.lng,
+        maxPickupRadiusKm,
       })
     } catch (err) {
       setError(authErrorMessage(err, 'Google sign up failed. Try again.'))
@@ -222,6 +299,45 @@ export function OrgSignupStep1({
                     )}
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-gray-100 pt-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">
+              Service Location
+            </h3>
+            <p className="mb-4 text-sm font-medium text-gray-500">
+              Required for routing household requests to the nearest approved
+              provider.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-bold text-gray-700 mb-1.5">
+                  Service base / pickup area
+                </label>
+                <input
+                  name="serviceBaseAddress"
+                  type="text"
+                  required
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
+                  placeholder="e.g. Westlands, Nairobi or Mombasa Road, Nairobi"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1.5">
+                  Pickup Radius (km)
+                </label>
+                <input
+                  name="maxPickupRadiusKm"
+                  type="number"
+                  min="1"
+                  step="1"
+                  required
+                  defaultValue="25"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
+                  placeholder="25"
+                />
               </div>
             </div>
           </div>

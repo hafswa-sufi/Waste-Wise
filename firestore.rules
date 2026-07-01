@@ -78,6 +78,8 @@ service cloud.firestore {
           'buildingNameNumber',
           'lat',
           'lng',
+          'maxPickupRadiusKm',
+          'serviceBaseAddress',
           'organizationName',
           'organizationType',
           'registrationNumber',
@@ -107,6 +109,7 @@ service cloud.firestore {
             'partner',
             'partnerUserId',
             'status',
+            'routingStatus',
             'confirmedAt',
             'collectedAt',
             'updatedAt'
@@ -123,17 +126,26 @@ service cloud.firestore {
     function partnerDeclineUpdateOnly() {
       return isApprovedPartnerFor(resource.data.type)
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['declinedPartnerIds', 'updatedAt'])
-        && (
-          !('partnerUserId' in resource.data)
-          || resource.data.partnerUserId == null
-        )
+          .hasOnly([
+            'declinedPartnerIds',
+            'partner',
+            'partnerUserId',
+            'status',
+            'routingStatus',
+            'updatedAt'
+          ])
+        && resource.data.partnerUserId == request.auth.uid
         && (
           !('declinedPartnerIds' in resource.data)
           || request.resource.data.declinedPartnerIds
             .hasAll(resource.data.declinedPartnerIds)
         )
-        && request.auth.uid in request.resource.data.declinedPartnerIds;
+        && request.auth.uid in request.resource.data.declinedPartnerIds
+        && request.resource.data.status == 'Assigned'
+        && isApprovedPartnerUserFor(
+          request.resource.data.partnerUserId,
+          resource.data.type
+        );
     }
 
     function adminActionAssignmentUpdateOnly() {
@@ -167,7 +179,15 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow read: if signedIn()
+        && (
+          request.auth.uid == userId
+          || isAdmin()
+          || (
+            isPartnerRole(resource.data.role)
+            && resource.data.approvalStatus == 'approved'
+          )
+        );
 
       allow create: if signedIn()
         && request.auth.uid == userId
@@ -209,7 +229,11 @@ service cloud.firestore {
     }
 
     match /{path=**}/householdActions/{actionId} {
-      allow read: if isAdmin() || isApprovedPartnerFor(resource.data.type);
+      allow read: if isAdmin()
+        || (
+          isApprovedPartnerFor(resource.data.type)
+          && resource.data.partnerUserId == request.auth.uid
+        );
       allow update: if partnerActionUpdateOnly()
         || partnerDeclineUpdateOnly()
         || adminActionAssignmentUpdateOnly();

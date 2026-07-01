@@ -4,6 +4,7 @@ import { ArrowLeft, Building2, Save } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { db } from '../../src/firebase/firebase'
 import { useAuth } from '../../src/context/useAuth'
+import { authErrorMessage } from '../auth/authErrors'
 
 export function PartnerProfile() {
   const navigate = useNavigate()
@@ -19,6 +20,14 @@ export function PartnerProfile() {
   )
   const [contactName, setContactName] = useState(userData?.contactName ?? '')
   const [designation, setDesignation] = useState(userData?.designation ?? '')
+  const [serviceBaseAddress, setServiceBaseAddress] = useState(
+    userData?.serviceBaseAddress ?? '',
+  )
+  const [maxPickupRadiusKm, setMaxPickupRadiusKm] = useState(
+    typeof userData?.maxPickupRadiusKm === 'number'
+      ? String(userData.maxPickupRadiusKm)
+      : '25',
+  )
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -39,20 +48,64 @@ export function PartnerProfile() {
 
     setSaving(true)
     try {
+      const radius = Number(maxPickupRadiusKm)
+      const locationQuery = [
+        serviceBaseAddress.trim(),
+        operatingCounties.trim(),
+        'Kenya',
+      ]
+        .filter(Boolean)
+        .join(', ')
+
+      if (!serviceBaseAddress.trim()) {
+        throw new Error('Enter the service base or pickup area.')
+      }
+      if (!Number.isFinite(radius) || radius <= 0) {
+        throw new Error('Enter a valid pickup radius in kilometres.')
+      }
+
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ke&q=${encodeURIComponent(
+          locationQuery,
+        )}`,
+      )
+      const results = (await response.json()) as Array<{
+        lat?: string
+        lon?: string
+      }>
+      const result = results[0]
+      const lat = Number(result?.lat)
+      const lng = Number(result?.lon)
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        throw new Error(
+          'Could not find that service location. Try estate, road, town, and county.',
+        )
+      }
+
       await updateDoc(doc(db, 'users', currentUser.uid), {
         name: contactName.trim() || organizationName.trim(),
         location: operatingCounties.trim(),
         organizationName: organizationName.trim(),
         registrationNumber: registrationNumber.trim(),
         operatingCounties: operatingCounties.trim(),
+        serviceBaseAddress: serviceBaseAddress.trim(),
         contactName: contactName.trim(),
         designation: designation.trim(),
+        lat,
+        lng,
+        maxPickupRadiusKm: radius,
         updatedAt: serverTimestamp(),
       })
       setMessage('Partner details updated.')
     } catch (saveError) {
       console.error('Partner profile update error:', saveError)
-      setError('Could not update these details. Check your connection and rules.')
+      setError(
+        authErrorMessage(
+          saveError,
+          'We could not save your organisation details. Check your connection and try again.',
+        ),
+      )
     } finally {
       setSaving(false)
     }
@@ -155,6 +208,32 @@ export function PartnerProfile() {
                 value={designation}
                 onChange={(event) => setDesignation(event.target.value)}
                 required
+                className="mt-1.5 w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 focus:border-wastewise-green focus:outline-none focus:ring-2 focus:ring-wastewise-green/20"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-bold text-gray-700">
+                Service base / pickup area
+              </span>
+              <input
+                value={serviceBaseAddress}
+                onChange={(event) => setServiceBaseAddress(event.target.value)}
+                required
+                placeholder="e.g. Westlands, Nairobi"
+                className="mt-1.5 w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 focus:border-wastewise-green focus:outline-none focus:ring-2 focus:ring-wastewise-green/20"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-bold text-gray-700">
+                Pickup radius (km)
+              </span>
+              <input
+                value={maxPickupRadiusKm}
+                onChange={(event) => setMaxPickupRadiusKm(event.target.value)}
+                required
+                placeholder="25"
                 className="mt-1.5 w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 focus:border-wastewise-green focus:outline-none focus:ring-2 focus:ring-wastewise-green/20"
               />
             </label>

@@ -113,6 +113,22 @@ function normalizeArea(value: string) {
   return value.trim().replace(/\s+/g, ' ')
 }
 
+function adminErrorMessage(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : String(error)
+
+  if (message.includes('permission-denied')) {
+    return 'This admin account is not allowed to make that change. Confirm you are logged in as an approved admin.'
+  }
+  if (message.includes('unavailable') || message.includes('network')) {
+    return 'The connection dropped before the change was saved. Check your internet and try again.'
+  }
+  if (message.includes('not-found')) {
+    return 'This record was not found. It may have been updated or removed already.'
+  }
+
+  return fallback
+}
+
 export function Admin() {
   const navigate = useNavigate()
   const { userData } = useAuth()
@@ -164,7 +180,12 @@ export function Admin() {
       },
       (snapshotError) => {
         console.error('Admin partner load error:', snapshotError)
-        setError('Could not load partner applications.')
+        setError(
+          adminErrorMessage(
+            snapshotError,
+            'We could not load partner applications right now. Refresh the page or log in again as admin.',
+          ),
+        )
         setLoading(false)
       },
     )
@@ -420,7 +441,12 @@ export function Admin() {
       )
     } catch (assignmentError) {
       console.error('Admin batch assignment error:', assignmentError)
-      setError('Could not assign this batch. Check admin Firestore rules.')
+      setError(
+        adminErrorMessage(
+          assignmentError,
+          'This batch could not be assigned. Make sure the selected partner is still approved, then try again.',
+        ),
+      )
     } finally {
       setAssigningBatchKey(null)
     }
@@ -441,7 +467,12 @@ export function Admin() {
       }
     } catch (decisionError) {
       console.error('Admin decision error:', decisionError)
-      setError('Could not save that approval decision. Check admin rules.')
+      setError(
+        adminErrorMessage(
+          decisionError,
+          'That approval decision could not be saved. Refresh the applications list and try again.',
+        ),
+      )
     } finally {
       setWorkingUserId(null)
     }

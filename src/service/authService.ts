@@ -25,6 +25,8 @@ export interface UserData {
   buildingNameNumber?: string
   lat?: number
   lng?: number
+  maxPickupRadiusKm?: number
+  serviceBaseAddress?: string
   organizationName?: string
   organizationType?: 'NGO' | 'Recycling Company'
   registrationNumber?: string
@@ -43,6 +45,8 @@ export interface SignupProfileData {
   buildingNameNumber?: string
   lat?: number
   lng?: number
+  maxPickupRadiusKm?: number
+  serviceBaseAddress?: string
   organizationName?: string
 
   organizationType?: 'NGO' | 'Recycling Company'

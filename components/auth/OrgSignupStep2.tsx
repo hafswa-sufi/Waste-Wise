@@ -22,6 +22,11 @@ export function OrgSignupStep2({ onSubmit, onBack }: OrgSignupStep2Props) {
     e.preventDefault()
     setError(null)
 
+    if (!certificateFile) {
+      setError('Upload your certificate of registration before submitting.')
+      return
+    }
+
     if (certificateFile && certificateFile.size > 5 * 1024 * 1024) {
       setError('The certificate file must be 5MB or smaller.')
       return
@@ -32,7 +37,9 @@ export function OrgSignupStep2({ onSubmit, onBack }: OrgSignupStep2Props) {
       await onSubmit(certificateFile)
     } catch (submitError) {
       console.error('Partner document upload failed:', submitError)
-      setError('Could not submit your registration. Try again.')
+      setError(
+        'We could not submit your registration documents. Check your connection and try again.',
+      )
     } finally {
       setSubmitting(false)
     }

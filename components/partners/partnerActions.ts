@@ -5,6 +5,7 @@ import {
   collection,
   collectionGroup,
   doc,
+  getDocs,
   onSnapshot,
   query,
   serverTimestamp,
@@ -19,6 +20,7 @@ import { useAuth } from '../../src/context/useAuth'
 import type { HouseholdActionType } from '../household/householdBackend'
 
 export type PartnerActionStatus =
+  | 'Assigned'
   | 'Pending'
   | 'Confirmed'
   | 'Collected'
@@ -77,6 +79,7 @@ function normalizePartnerAction(
   data: Record<string, unknown>,
 ): PartnerAction {
   const householdId = actionRef.parent.parent?.id ?? ''
+  const partnerUserId = asString(data.partnerUserId) || null
   const pickupLocation =
     data.pickupLocation && typeof data.pickupLocation === 'object'
       ? (data.pickupLocation as Record<string, unknown>)
@@ -90,8 +93,10 @@ function normalizePartnerAction(
     pantryItemId: asString(data.pantryItemId) || null,
     name: asString(data.name, 'Unnamed item'),
     quantity: asString(data.quantity, '1 item'),
-    partner: asString(data.partner, 'Partner pending'),
-    partnerUserId: asString(data.partnerUserId) || null,
+    partner: partnerUserId
+      ? asString(data.partner, 'Assigned partner')
+      : 'Unassigned request',
+    partnerUserId,
     batchId: asString(data.batchId) || null,
     batchArea: asString(data.batchArea) || null,
     batchAssignedAt: data.batchAssignedAt as Timestamp | undefined,
@@ -119,6 +124,7 @@ function normalizePartnerAction(
 
 function statusRank(status: PartnerActionStatus) {
   return {
+    Assigned: 0,
     Pending: 0,
     Confirmed: 1,
     Collected: 2,
@@ -150,6 +156,97 @@ function pickupArea(action: PartnerAction) {
     action.pickupLocation?.buildingNameNumber ||
     action.pickupLocation?.label ||
     'No pickup area saved'
+  )
+}
+
+export function partnerActionErrorMessage(error: unknown, actionLabel: string) {
+  const message = error instanceof Error ? error.message : String(error)
+
+  if (message.includes('Please log in again')) {
+    return 'Your session has expired. Please log in again, then try the pickup update once more.'
+  }
+  if (message.includes('Only the assigned partner')) {
+    return 'This request is assigned to another partner, so your account cannot change it.'
+  }
+  if (message.includes('No other approved nearby partner')) {
+    return 'There is no other approved nearby partner to receive this request right now.'
+  }
+  if (message.includes('permission-denied')) {
+    return `Your account is not allowed to update this ${actionLabel}. Make sure the organisation is approved and this request is assigned to you.`
+  }
+  if (message.includes('unavailable') || message.includes('network')) {
+    return 'The connection dropped before the update finished. Check your internet and try again.'
+  }
+
+  return `This ${actionLabel} could not be updated. It may already have been changed, cancelled, or assigned elsewhere.`
+}
+
+function distanceKm(aLat: number, aLng: number, bLat: number, bLng: number) {
+  const earthRadiusKm = 6371
+  const dLat = ((bLat - aLat) * Math.PI) / 180
+  const dLng = ((bLng - aLng) * Math.PI) / 180
+  const lat1 = (aLat * Math.PI) / 180
+  const lat2 = (bLat * Math.PI) / 180
+  const haversine =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+
+  return (
+    2 *
+    earthRadiusKm *
+    Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+  )
+}
+
+async function findNextNearestPartner(
+  action: PartnerAction,
+  excludePartnerIds: string[],
+) {
+  const partnerRole = action.type === 'donation' ? 'NGO' : 'RecyclingFirm'
+  const lat = action.pickupLocation?.lat
+  const lng = action.pickupLocation?.lng
+
+  if (!isNumber(lat) || !isNumber(lng)) return null
+
+  const partnerQuery = query(
+    collection(db, 'users'),
+    where('role', '==', partnerRole),
+    where('approvalStatus', '==', 'approved'),
+  )
+  const snapshot = await getDocs(partnerQuery)
+
+  return (
+    snapshot.docs
+      .map((partnerDoc) => {
+        const partner = partnerDoc.data()
+        if (excludePartnerIds.includes(partnerDoc.id)) return null
+        if (!isNumber(partner.lat) || !isNumber(partner.lng)) return null
+
+        const distance = distanceKm(lat, lng, partner.lat, partner.lng)
+        const maxPickupRadiusKm = isNumber(partner.maxPickupRadiusKm)
+          ? partner.maxPickupRadiusKm
+          : null
+
+        if (maxPickupRadiusKm !== null && distance > maxPickupRadiusKm) {
+          return null
+        }
+
+        return {
+          userId: partnerDoc.id,
+          name:
+            asString(partner.organizationName) ||
+            asString(partner.name) ||
+            'Approved partner',
+          distance,
+        }
+      })
+      .filter(
+        (
+          partner,
+        ): partner is { userId: string; name: string; distance: number } =>
+          partner !== null,
+      )
+      .sort((a, b) => a.distance - b.distance)[0] ?? null
   )
 }
 
@@ -249,6 +346,7 @@ export function usePartnerActions(type: 'donation' | 'disposal') {
     const actionsQuery = query(
       collectionGroup(db, 'householdActions'),
       where('type', '==', type),
+      where('partnerUserId', '==', currentUser.uid),
     )
 
     return onSnapshot(
@@ -261,7 +359,7 @@ export function usePartnerActions(type: 'donation' | 'disposal') {
           .filter((action) => action.status !== 'Cancelled')
           .filter(
             (action) =>
-              !action.partnerUserId || action.partnerUserId === currentUser.uid,
+              action.partnerUserId === currentUser.uid,
           )
           .filter(
             (action) => !action.declinedPartnerIds.includes(currentUser.uid),
@@ -280,21 +378,23 @@ export function usePartnerActions(type: 'donation' | 'disposal') {
       },
       (snapshotError) => {
         console.error('Partner action load error:', snapshotError)
-        setError('Could not load household requests. Check partner rules.')
+        setError(
+          'We could not load your assigned household requests. Confirm your organisation is approved, then refresh the page.',
+        )
         setLoading(false)
       },
     )
   }, [currentUser, type])
 
   const availableActions = useMemo(
-    () => actions.filter((action) => !action.partnerUserId),
+    () => actions.filter((action) => action.status === 'Assigned'),
     [actions],
   )
 
   const assignedActions = useMemo(
     () =>
-      actions.filter((action) => action.partnerUserId === currentUser?.uid),
-    [actions, currentUser?.uid],
+      actions.filter((action) => action.status !== 'Assigned'),
+    [actions],
   )
 
   async function writeStatusHistory(
@@ -323,6 +423,7 @@ export function usePartnerActions(type: 'donation' | 'disposal') {
       partner: partnerName,
       partnerUserId: currentUser.uid,
       status: 'Confirmed',
+      routingStatus: 'accepted',
       confirmedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
@@ -366,12 +467,25 @@ export function usePartnerActions(type: 'donation' | 'disposal') {
 
   async function declineAction(action: PartnerAction) {
     if (!currentUser || !userData) throw new Error('Please log in again.')
-    if (action.partnerUserId) {
-      throw new Error('Assigned requests cannot be declined here.')
+    if (action.partnerUserId !== currentUser.uid) {
+      throw new Error('Only the assigned partner can decline this request.')
+    }
+
+    const declinedPartnerIds = [
+      ...new Set([...action.declinedPartnerIds, currentUser.uid]),
+    ]
+    const nextPartner = await findNextNearestPartner(action, declinedPartnerIds)
+
+    if (!nextPartner) {
+      throw new Error('No other approved nearby partner is available for this request.')
     }
 
     await updateDoc(action.ref, {
       declinedPartnerIds: arrayUnion(currentUser.uid),
+      partner: nextPartner.name,
+      partnerUserId: nextPartner.userId,
+      status: 'Assigned',
+      routingStatus: 'rerouted',
       updatedAt: serverTimestamp(),
     })
 

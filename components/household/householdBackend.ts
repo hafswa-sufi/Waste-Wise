@@ -5,11 +5,13 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   updateDoc,
+  where,
   type DocumentData,
   type Timestamp,
 } from 'firebase/firestore'
@@ -26,7 +28,12 @@ export type PantryCategory =
 
 export type StorageType = 'Fridge' | 'Counter' | 'Basket'
 export type PantryStatus = 'Fresh' | 'Expiring Soon' | 'Expired'
-export type ActionStatus = 'Pending' | 'Confirmed' | 'Collected' | 'Cancelled'
+export type ActionStatus =
+  | 'Assigned'
+  | 'Pending'
+  | 'Confirmed'
+  | 'Collected'
+  | 'Cancelled'
 export type HouseholdActionType = 'donation' | 'disposal' | 'consumed'
 
 export interface PantryItem {
@@ -249,6 +256,74 @@ function quantityFields(value: string) {
     quantityValue: parsed.amount,
     quantityUnit: parsed.unit || 'item',
   }
+}
+
+function distanceKm(aLat: number, aLng: number, bLat: number, bLng: number) {
+  const earthRadiusKm = 6371
+  const dLat = ((bLat - aLat) * Math.PI) / 180
+  const dLng = ((bLng - aLng) * Math.PI) / 180
+  const lat1 = (aLat * Math.PI) / 180
+  const lat2 = (bLat * Math.PI) / 180
+  const haversine =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+
+  return (
+    2 *
+    earthRadiusKm *
+    Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+  )
+}
+
+async function findNearestPartner(
+  type: 'donation' | 'disposal',
+  pickupLocation: { lat: number; lng: number },
+) {
+  const partnerRole = type === 'donation' ? 'NGO' : 'RecyclingFirm'
+  const partnerQuery = query(
+    collection(db, 'users'),
+    where('role', '==', partnerRole),
+    where('approvalStatus', '==', 'approved'),
+  )
+  const snapshot = await getDocs(partnerQuery)
+
+  const partners = snapshot.docs
+    .map((partnerDoc) => {
+      const partner = partnerDoc.data()
+      if (!isNumber(partner.lat) || !isNumber(partner.lng)) return null
+
+      const distance = distanceKm(
+        pickupLocation.lat,
+        pickupLocation.lng,
+        partner.lat,
+        partner.lng,
+      )
+      const maxPickupRadiusKm = isNumber(partner.maxPickupRadiusKm)
+        ? partner.maxPickupRadiusKm
+        : null
+
+      if (maxPickupRadiusKm !== null && distance > maxPickupRadiusKm) {
+        return null
+      }
+
+      return {
+        userId: partnerDoc.id,
+        name:
+          asString(partner.organizationName) ||
+          asString(partner.name) ||
+          'Approved partner',
+        distance,
+      }
+    })
+    .filter(
+      (
+        partner,
+      ): partner is { userId: string; name: string; distance: number } =>
+        partner !== null,
+    )
+    .sort((a, b) => a.distance - b.distance)
+
+  return partners[0] ?? null
 }
 
 function formatQuantity(amount: number, unit: string) {
@@ -787,6 +862,10 @@ export function useHouseholdBackend() {
       return
     }
 
+    if (input.type !== 'donation' && input.type !== 'disposal') {
+      throw new Error('Only donation and disposal requests can be routed to partners.')
+    }
+
     if (!currentUser) {
       recordLocalAction(
         {
@@ -814,17 +893,35 @@ export function useHouseholdBackend() {
             }
           : null
 
+      if (!pickupLocation) {
+        throw new Error(
+          'Save your household pickup pin in your profile before creating a pickup request.',
+        )
+      }
+
+      const routedPartner = await findNearestPartner(input.type, pickupLocation)
+      if (!routedPartner) {
+        throw new Error(
+          `No approved ${
+            input.type === 'donation' ? 'NGO' : 'recycling company'
+          } with a saved service location is available for this request.`,
+        )
+      }
+
       await addDoc(householdCollection(currentUser.uid, 'householdActions'), {
         type: input.type,
         pantryItemId: input.pantryItemId ?? null,
         name: input.name,
         quantity: input.quantity,
         ...quantityFields(input.quantity),
-        partner: input.partner || 'Partner pending',
-        partnerUserId: null,
+        partner: routedPartner.name,
+        partnerUserId: routedPartner.userId,
         pickupDate: input.pickupDate || defaultPickupDate(),
         pickupLocation,
-        status: 'Pending',
+        routingMethod: 'nearest_partner',
+        routingDistanceKm: Number(routedPartner.distance.toFixed(2)),
+        routingStatus: 'offered',
+        status: 'Assigned',
         notificationRead: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
