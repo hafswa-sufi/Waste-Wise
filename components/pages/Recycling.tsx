@@ -483,7 +483,8 @@ export function Recycling() {
                   >
                     View Details
                   </button>
-                  {action.status === 'Assigned' && (
+                  {(action.status === 'Assigned' ||
+                    action.status === 'Pending') && (
                     <>
                       <button
                         type="button"

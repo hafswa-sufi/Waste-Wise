@@ -161,10 +161,9 @@ service cloud.firestore {
             'partner',
             'partnerUserId',
             'status',
-            'confirmedAt',
             'updatedAt'
           ])
-        && request.resource.data.status == 'Confirmed'
+        && request.resource.data.status == 'Assigned'
         && request.resource.data.batchId is string
         && request.resource.data.batchArea is string
         && request.resource.data.batchRequestCount is number

@@ -490,14 +490,13 @@ export function Admin() {
           batchRequestCount: group.requestCount,
           partner: partnerName,
           partnerUserId: partner.userId,
-          status: 'Confirmed',
-          confirmedAt: serverTimestamp(),
+          status: 'Assigned',
           updatedAt: serverTimestamp(),
         })
 
         batch.set(doc(collection(action.ref, 'statusHistory')), {
           previousStatus: action.status,
-          status: 'Confirmed',
+          status: 'Assigned',
           changedByUserId: userData?.userId || 'admin',
           changedByRole: 'Admin',
           changedAt: serverTimestamp(),

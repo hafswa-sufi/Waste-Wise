@@ -195,6 +195,7 @@ export function displayDistance(value?: number | null) {
 }
 
 export function displayPartnerStatus(status: PartnerActionStatus) {
+  if (status === 'Pending') return 'Awaiting response'
   if (status === 'Assigned') return 'Awaiting response'
   if (status === 'Confirmed') return 'Scheduled'
   if (status === 'Collected') return 'Collected'
@@ -466,13 +467,18 @@ export function usePartnerActions(type: 'donation' | 'disposal') {
   }, [currentUser, type, userData?.lat, userData?.lng])
 
   const availableActions = useMemo(
-    () => actions.filter((action) => action.status === 'Assigned'),
+    () =>
+      actions.filter(
+        (action) => action.status === 'Assigned' || action.status === 'Pending',
+      ),
     [actions],
   )
 
   const assignedActions = useMemo(
     () =>
-      actions.filter((action) => action.status !== 'Assigned'),
+      actions.filter(
+        (action) => action.status !== 'Assigned' && action.status !== 'Pending',
+      ),
     [actions],
   )
 
