@@ -26,7 +26,6 @@ export function RequireAuth({ children, allowedRoles }: RequireAuthProps) {
       window.sessionStorage.getItem('wastewise.justLoggedOut') === 'true'
 
     if (loggedOutIntentionally) {
-      window.sessionStorage.removeItem('wastewise.justLoggedOut')
       return (
         <Navigate
           to="/auth?mode=login"

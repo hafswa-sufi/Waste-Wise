@@ -2,7 +2,6 @@ import {
   displayDate,
   useHouseholdBackend,
   type ActionItem,
-  type ActionStatus,
 } from './householdBackend'
 import { useEffect, useRef, useState } from 'react'
 import { Calendar, HandHeart, RotateCcw } from 'lucide-react'
@@ -12,7 +11,6 @@ export function DonateTab() {
     donationItems,
     loading,
     error,
-    updateActionStatus,
     removeActionAndRestoreToPantry,
   } = useHouseholdBackend()
   const listRef = useRef<HTMLDivElement>(null)
@@ -34,13 +32,16 @@ export function DonateTab() {
   }
 
   const counts = {
-    pending: donationItems.filter((i) => i.status === 'Pending').length,
+    pending: donationItems.filter(
+      (i) => i.status === 'Pending' || i.status === 'Assigned',
+    ).length,
     confirmed: donationItems.filter((i) => i.status === 'Confirmed').length,
     collected: donationItems.filter((i) => i.status === 'Collected').length,
   }
   const getStatusColor = (status: ActionItem['status']) => {
     switch (status) {
       case 'Pending':
+      case 'Assigned':
         return 'bg-yellow-100 text-yellow-800'
       case 'Confirmed':
         return 'bg-blue-100 text-blue-800'
@@ -50,6 +51,9 @@ export function DonateTab() {
         return 'bg-gray-100 text-gray-800'
     }
   }
+  const displayStatus = (status: ActionItem['status']) =>
+    status === 'Assigned' ? 'Pending partner acceptance' : status
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
@@ -118,23 +122,8 @@ export function DonateTab() {
               <span
                 className={`px-3 py-1.5 rounded-full text-xs font-bold ${getStatusColor(item.status)}`}
               >
-                {item.status}
+                {displayStatus(item.status)}
               </span>
-              <select
-                value={item.status}
-                onChange={(event) =>
-                  updateActionStatus(
-                    item.id,
-                    event.target.value as ActionStatus,
-                  )
-                }
-                className="border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold text-gray-600 bg-white"
-                aria-label={`Update ${item.name} donation status`}
-              >
-                <option>Pending</option>
-                <option>Confirmed</option>
-                <option>Collected</option>
-              </select>
               <button
                 type="button"
                 onClick={() => handleRestore(item)}

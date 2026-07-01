@@ -858,6 +858,39 @@ export function useHouseholdBackend() {
     }
   }
 
+  async function reducePantryQuantity(
+    item: Pick<PantryItem, 'id' | 'quantity'>,
+    actionQuantity: string,
+  ) {
+    const remaining = remainingQuantity(item.quantity, actionQuantity)
+
+    if (!currentUser) {
+      setPantryItems((current) => {
+        const next = remaining.isFinished
+          ? current.filter((pantryItem) => pantryItem.id !== item.id)
+          : current.map((pantryItem) =>
+              pantryItem.id === item.id
+                ? { ...pantryItem, quantity: remaining.quantity }
+                : pantryItem,
+            )
+        writeLocalItems(localPantryKey, next)
+        return next
+      })
+      return
+    }
+
+    if (remaining.isFinished) {
+      await deleteDoc(doc(db, 'users', currentUser.uid, 'pantryItems', item.id))
+      return
+    }
+
+    await updateDoc(doc(db, 'users', currentUser.uid, 'pantryItems', item.id), {
+      quantity: remaining.quantity,
+      ...quantityFields(remaining.quantity),
+      updatedAt: serverTimestamp(),
+    })
+  }
+
   async function flagAction(input: NewActionInput) {
     if (
       input.pantryItemId &&
@@ -868,7 +901,7 @@ export function useHouseholdBackend() {
           item.status !== 'Cancelled',
       )
     ) {
-      return
+      return false
     }
 
     if (input.type !== 'donation' && input.type !== 'disposal') {
@@ -884,7 +917,7 @@ export function useHouseholdBackend() {
         },
         'Pending',
       )
-      return
+      return true
     }
 
     try {
@@ -937,6 +970,7 @@ export function useHouseholdBackend() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
+      return true
     } catch (err) {
       if (isPermissionError(err)) {
         throw new Error(
@@ -1189,6 +1223,7 @@ export function useHouseholdBackend() {
     updatePantryItem,
     markConsumed,
     consumePantryQuantity,
+    reducePantryQuantity,
     flagAction,
     updateActionStatus,
     removeActionAndRestoreToPantry,

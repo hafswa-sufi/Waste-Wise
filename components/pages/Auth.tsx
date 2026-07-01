@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useLocation, Link, useSearchParams } from 'react-router-dom'
 import { Leaf } from 'lucide-react'
 import gsap from 'gsap'
@@ -21,8 +21,10 @@ export type OrgType = 'NGO' | 'Recycling Company'
 export function Auth() {
   const location = useLocation()
   const [searchParams] = useSearchParams()
+  const justLoggedOut =
+    window.sessionStorage.getItem('wastewise.justLoggedOut') === 'true'
   const authError =
-    typeof location.state?.authError === 'string'
+    !justLoggedOut && typeof location.state?.authError === 'string'
       ? location.state.authError
       : null
   const screenInit = useScreenInit()
@@ -40,6 +42,12 @@ export function Auth() {
   const [orgSignupDraft, setOrgSignupDraft] =
     useState<OrgSignupDraft | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (justLoggedOut) {
+      window.sessionStorage.removeItem('wastewise.justLoggedOut')
+    }
+  }, [justLoggedOut])
 
   const partnerRole = (type: OrgType) =>
     type === 'NGO' ? 'NGO' : 'RecyclingFirm'

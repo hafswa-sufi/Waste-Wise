@@ -7,7 +7,6 @@ import {
   Bell as BellIcon,
   HandHeart,
   Trash2,
-  Sparkles,
   CheckCircle2,
   X,
 } from 'lucide-react'
@@ -19,7 +18,6 @@ import { useHouseholdBackend } from './householdBackend'
 export type TabType =
   | 'pantry'
   | 'alerts'
-  | 'freshness'
   | 'consumed'
   | 'donate'
   | 'dispose'
@@ -36,7 +34,6 @@ const tabs: {
 }[] = [
   { id: 'pantry', label: 'Pantry', icon: Package },
   { id: 'alerts', label: 'Alerts', icon: BellIcon },
-  { id: 'freshness', label: 'Freshness', icon: Sparkles },
   { id: 'consumed', label: 'Consumed', icon: CheckCircle2 },
   { id: 'donate', label: 'Donate', icon: HandHeart },
   { id: 'dispose', label: 'Dispose', icon: Trash2 },

@@ -23,7 +23,6 @@ import {
   MapPin,
   RefreshCw,
   Recycle,
-  Scale,
   ShieldCheck,
   X,
   XCircle,
@@ -39,7 +38,7 @@ import {
 import { useAuth } from '../../src/context/useAuth'
 
 type PartnerStatus = 'all' | 'pending' | 'approved' | 'rejected'
-type ReportFilter = 'all' | 'donation' | 'disposal' | 'consumed' | 'collected'
+type ReportFilter = 'all' | 'donation' | 'disposal' | 'consumed' | 'pending' | 'collected'
 type AdminView = 'verification' | 'reports' | 'aggregation'
 
 interface PartnerProfile extends UserData {
@@ -90,10 +89,11 @@ const statusStyles = {
 
 const reportLabels: Record<ReportFilter, string> = {
   all: 'All Activity',
-  donation: 'Donations',
-  disposal: 'Disposals',
-  consumed: 'Consumed',
-  collected: 'Collected',
+  donation: 'Donation Requests',
+  disposal: 'Disposal Requests',
+  consumed: 'Consumed Food',
+  pending: 'Pending Requests',
+  collected: 'Collected Pickups',
 }
 
 function formatDate(value: unknown) {
@@ -301,7 +301,8 @@ export function Admin() {
       donation: reports.filter((item) => item.type === 'donation').length,
       disposal: reports.filter((item) => item.type === 'disposal').length,
       consumed: reports.filter((item) => item.type === 'consumed').length,
-      collected: reports.filter((item) => item.status === 'Collected').length,
+      pending: reports.filter((item) => item.status === 'Pending' || item.status === 'Assigned').length,
+      collected: reports.filter((item) => item.type !== 'consumed' && item.status === 'Collected').length,
       quantity: reports.reduce((total, item) => {
         return total + quantityAmount(item.quantity)
       }, 0),
@@ -413,7 +414,10 @@ export function Admin() {
   const filteredReports = useMemo(() => {
     if (reportFilter === 'all') return reports
     if (reportFilter === 'collected') {
-      return reports.filter((item) => item.status === 'Collected')
+      return reports.filter((item) => item.type !== 'consumed' && item.status === 'Collected')
+    }
+    if (reportFilter === 'pending') {
+      return reports.filter((item) => item.status === 'Pending' || item.status === 'Assigned')
     }
     return reports.filter((item) => item.type === reportFilter)
   }, [reportFilter, reports])
@@ -547,6 +551,7 @@ export function Admin() {
   }
 
   const handleLogout = async () => {
+    if (!window.confirm('Log out of WasteWise?')) return
     window.sessionStorage.setItem('wastewise.justLoggedOut', 'true')
     await logout()
     navigate('/auth', { replace: true, state: { authState: 'login' } })
@@ -561,6 +566,11 @@ export function Admin() {
   const flowDetail = (item: AdminActionReport) => {
     if (item.type === 'consumed') return 'Household consumed'
     return item.pickupDate || 'Pickup not scheduled'
+  }
+
+  const displayReportStatus = (item: AdminActionReport) => {
+    if (item.type === 'consumed') return 'Consumed'
+    return item.status
   }
 
   return (
@@ -855,11 +865,11 @@ export function Admin() {
           <>
         <section className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {[
-            ['donation', 'Donations', reportTotals.donation, BarChart3],
-            ['disposal', 'Disposals', reportTotals.disposal, Recycle],
+            ['donation', 'Donation Requests', reportTotals.donation, BarChart3],
+            ['disposal', 'Disposal Requests', reportTotals.disposal, Recycle],
             ['consumed', 'Consumed', reportTotals.consumed, CheckCircle2],
-            ['collected', 'Collected', reportTotals.collected, ShieldCheck],
-            ['all', 'Quantity', reportTotals.quantity, Scale],
+            ['pending', 'Pending', reportTotals.pending, Clock3],
+            ['collected', 'Collected Pickups', reportTotals.collected, ShieldCheck],
           ].map(([filterKey, label, value, Icon]) => {
             const MetricIcon = Icon as typeof BarChart3
             return (
@@ -942,7 +952,7 @@ export function Admin() {
                       </td>
                       <td className="px-3 py-3">
                         <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-bold text-gray-700">
-                          {item.status}
+                          {displayReportStatus(item)}
                         </span>
                       </td>
                       <td className="px-3 py-3 text-gray-600">

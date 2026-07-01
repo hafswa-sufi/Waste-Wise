@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { ArrowLeft, Eye, EyeOff, MapPin } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, LocateFixed, MapPin } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { signInWithGoogle, signUp } from '../../src/service/authService'
 import { authErrorMessage } from './authErrors'
@@ -11,6 +11,10 @@ import {
   useMapEvents,
 } from 'react-leaflet'
 import L from 'leaflet'
+import {
+  buildHouseholdLocationQueries,
+  searchKenyaLocation,
+} from '../locationLookup'
 
 
 interface HouseholdSignupProps {
@@ -98,6 +102,7 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
   const [pinLat, setPinLat] = useState<number | null>(null)
   const [pinLng, setPinLng] = useState<number | null>(null)
   const [mapSearchLoading, setMapSearchLoading] = useState(false)
+  const [locatingUser, setLocatingUser] = useState(false)
 
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -172,12 +177,9 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
   }
 
   const handleFindLocation = async () => {
-    const query = [buildingNameNumber, location, 'Kenya']
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .join(', ')
+    const queries = buildHouseholdLocationQueries(buildingNameNumber, location)
 
-    if (!query) {
+    if (queries.length === 0) {
       setError('Enter your county/location or building name first.')
       return
     }
@@ -185,31 +187,43 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
     setError(null)
     setMapSearchLoading(true)
     try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ke&q=${encodeURIComponent(
-          query,
-        )}`,
-      )
-      const results = (await response.json()) as Array<{
-        lat?: string
-        lon?: string
-      }>
-      const result = results[0]
-      const lat = Number(result?.lat)
-      const lng = Number(result?.lon)
+      const result = await searchKenyaLocation(queries)
 
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      if (!result) {
         setError('Could not find that place. Try estate, road, town, and county.')
         return
       }
 
-      setPinLat(lat)
-      setPinLng(lng)
+      setPinLat(result.lat)
+      setPinLng(result.lng)
     } catch {
       setError('Could not search the map right now. You can still click the map manually.')
     } finally {
       setMapSearchLoading(false)
     }
+  }
+
+  const handleUseCurrentLocation = () => {
+    setError(null)
+
+    if (!navigator.geolocation) {
+      setError('Your browser does not support current-location lookup.')
+      return
+    }
+
+    setLocatingUser(true)
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setPinLat(position.coords.latitude)
+        setPinLng(position.coords.longitude)
+        setLocatingUser(false)
+      },
+      () => {
+        setError('Could not access your location. Allow location permission or click the map.')
+        setLocatingUser(false)
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    )
   }
 
   return (
@@ -325,14 +339,25 @@ export function HouseholdSignup({ onLoginClick }: HouseholdSignupProps) {
                   your pin.
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={handleFindLocation}
-                disabled={mapSearchLoading}
-                className="mb-3 w-full rounded-lg border border-green-100 bg-white px-3 py-2 text-sm font-bold text-wastewise-green hover:bg-green-50 disabled:opacity-60"
-              >
-                {mapSearchLoading ? 'Finding location...' : 'Find on map'}
-              </button>
+              <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={handleFindLocation}
+                  disabled={mapSearchLoading || locatingUser}
+                  className="rounded-lg border border-green-100 bg-white px-3 py-2 text-sm font-bold text-wastewise-green hover:bg-green-50 disabled:opacity-60"
+                >
+                  {mapSearchLoading ? 'Finding location...' : 'Find on map'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleUseCurrentLocation}
+                  disabled={mapSearchLoading || locatingUser}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                >
+                  <LocateFixed className="h-4 w-4" />
+                  {locatingUser ? 'Locating...' : 'Use my location'}
+                </button>
+              </div>
               <PinPicker
                 lat={pinLat}
                 lng={pinLng}

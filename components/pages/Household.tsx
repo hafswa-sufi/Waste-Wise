@@ -4,18 +4,37 @@ import { HouseholdNavbar } from '../household/HouseholdNavBar'
 import type { TabType } from '../household/HouseholdNavBar'
 import { PantryTab } from '../household/PantryTab'
 import { AlertsTab } from '../household/AlertsTab'
-import { FreshnessTab } from '../household/FreshnessTab'
 import { ConsumedTab } from '../household/ConsumedTab'
 import { DonateTab } from '../household/DonateTab'
 import { DisposeTab } from '../household/DisposeTab'
 import { useScreenInit } from '../../useScreenInit'
 import gsap from 'gsap'
+
+const householdTabs: TabType[] = [
+  'pantry',
+  'alerts',
+  'consumed',
+  'donate',
+  'dispose',
+]
+
+function isHouseholdTab(tab: string | null | undefined): tab is TabType {
+  return !!tab && householdTabs.includes(tab as TabType)
+}
+
 export function Household() {
   const screenInit = useScreenInit()
   const [searchParams] = useSearchParams()
-  const initialTab = searchParams.get('tab') as TabType | null
+  const requestedTab = searchParams.get('tab')
+  const screenInitTab =
+    typeof screenInit?.activeTab === 'string' ? screenInit.activeTab : null
+  const initialTab = isHouseholdTab(requestedTab)
+    ? requestedTab
+    : isHouseholdTab(screenInitTab)
+      ? screenInitTab
+      : 'pantry'
   const [activeTab, setActiveTab] = useState<TabType>(
-    initialTab ?? (screenInit?.activeTab as TabType | undefined) ?? 'pantry',
+    initialTab,
   )
   const contentRef = useRef<HTMLDivElement>(null)
   const handleTabChange = (tab: TabType) => {
@@ -54,8 +73,6 @@ export function Household() {
         return <PantryTab />
       case 'alerts':
         return <AlertsTab />
-      case 'freshness':
-        return <FreshnessTab />
       case 'consumed':
         return <ConsumedTab />
       case 'donate':
@@ -72,16 +89,7 @@ export function Household() {
 
       {/* Mobile Tab Navigation (visible only on small screens) */}
       <div className="md:hidden flex overflow-x-auto bg-white border-b border-gray-200 px-2 py-2 hide-scrollbar">
-        {(
-          [
-            'pantry',
-            'alerts',
-            'freshness',
-            'consumed',
-            'donate',
-            'dispose',
-          ] as TabType[]
-        ).map((tab) => (
+        {householdTabs.map((tab) => (
           <button
             key={tab}
             onClick={() => handleTabChange(tab)}

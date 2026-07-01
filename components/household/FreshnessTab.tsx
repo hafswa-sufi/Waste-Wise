@@ -46,6 +46,12 @@ const produceOptions: Array<{
     shelfLife: { Fridge: 5, Counter: 4, Basket: 3 },
   },
   {
+    value: 'avocado',
+    label: 'Avocado',
+    category: 'Fruits',
+    shelfLife: { Fridge: 5, Counter: 4, Basket: 3 },
+  },
+  {
     value: 'cabbage',
     label: 'Cabbage',
     category: 'Vegetables',
@@ -237,7 +243,10 @@ export function FreshnessTab() {
 
   const selectedKnownProduce =
     produceOptions.find((option) => option.value === produce) ??
-    filteredProduceOptions.find((option) => option.value === produce)
+    filteredProduceOptions.find((option) => option.value === produce) ??
+    (produceSearch.trim() && filteredProduceOptions.length === 1
+      ? filteredProduceOptions[0]
+      : undefined)
   const customCategory = inferCustomCategory(
     customProduceName.trim(),
     categoryFilter,
@@ -315,7 +324,7 @@ export function FreshnessTab() {
         setWeather({
           temperature,
           humidity,
-          summary: `${Math.round(temperature)}°C, ${Math.round(humidity)}% humidity`,
+          summary: `${Math.round(temperature)} deg C, ${Math.round(humidity)}% humidity`,
         })
       })
       .catch(() => {
@@ -441,8 +450,45 @@ export function FreshnessTab() {
               />
             </div>
             <p className="mt-2 text-xs font-medium text-gray-500">
-              Search, pick from the list, or type the food name below.
+              Search and select a result, or use a custom fresh food name.
             </p>
+            {produceSearch.trim() && (
+              <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 p-2">
+                {filteredProduceOptions.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {filteredProduceOptions.slice(0, 6).map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setProduce(option.value)
+                          setProduceSearch(option.label)
+                          setCustomProduceName('')
+                        }}
+                        className={`rounded-full px-3 py-1.5 text-xs font-bold ring-1 ${
+                          produce === option.value
+                            ? 'bg-green-50 text-wastewise-green ring-green-200'
+                            : 'bg-white text-gray-600 ring-gray-200 hover:bg-green-50'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomProduceName(produceSearch.trim())
+                      setProduce('')
+                    }}
+                    className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-gray-600 ring-1 ring-gray-200 hover:bg-green-50"
+                  >
+                    Use "{produceSearch.trim()}" as custom fresh food
+                  </button>
+                )}
+              </div>
+            )}
           </label>
 
           <label className="block">
@@ -465,7 +511,7 @@ export function FreshnessTab() {
 
           <label className="block">
             <span className="text-sm font-bold text-gray-700">
-              Choose from common foods
+              Common foods
             </span>
             <select
               value={produce}
@@ -492,7 +538,7 @@ export function FreshnessTab() {
 
           <label className="block">
             <span className="text-sm font-bold text-gray-700">
-              Or type the food name
+              Custom food name
             </span>
             <input
               value={customProduceName}
@@ -506,12 +552,14 @@ export function FreshnessTab() {
           </label>
 
           <label className="block">
-            <span className="text-sm font-bold text-gray-700">Quantity</span>
+            <span className="text-sm font-bold text-gray-700">
+              Pantry quantity
+            </span>
             <input
               value={quantity}
               onChange={(event) => setQuantity(event.target.value)}
               className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-wastewise-green focus:outline-none focus:ring-2 focus:ring-wastewise-green/20"
-              placeholder="1 bunch, 2kg, 6 pieces"
+              placeholder="Example: 2 kg, 1 bunch, 3 packets"
             />
           </label>
 

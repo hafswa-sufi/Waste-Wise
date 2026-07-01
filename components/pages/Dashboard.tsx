@@ -89,6 +89,7 @@ export function Dashboard() {
   )
 
   const handleLogout = async () => {
+    if (!window.confirm('Log out of WasteWise?')) return
     window.sessionStorage.setItem('wastewise.justLoggedOut', 'true')
     await logout()
     navigate('/auth', { replace: true, state: { authState: 'login' } })

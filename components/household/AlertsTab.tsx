@@ -5,8 +5,17 @@ import gsap from 'gsap'
 export function AlertsTab() {
   const containerRef = useRef<HTMLDivElement>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const { alerts, loading, error, consumePantryQuantity, flagAction } =
-    useHouseholdBackend()
+  const [consumingAlert, setConsumingAlert] = useState<AlertItem | null>(null)
+  const [consumedQuantity, setConsumedQuantity] = useState('')
+  const [formError, setFormError] = useState<string | null>(null)
+  const {
+    alerts,
+    loading,
+    error,
+    consumePantryQuantity,
+    reducePantryQuantity,
+    flagAction,
+  } = useHouseholdBackend()
 
   useEffect(() => {
     if (containerRef.current) {
@@ -60,6 +69,74 @@ export function AlertsTab() {
     setNotice(message)
     window.setTimeout(() => setNotice(null), 2500)
   }
+
+  const openConsumeModal = (item: AlertItem) => {
+    setConsumingAlert(item)
+    setConsumedQuantity('')
+    setFormError(null)
+  }
+
+  const submitConsumedQuantity = async () => {
+    if (!consumingAlert) return
+    if (!consumedQuantity.trim()) {
+      setFormError('Enter how much was consumed.')
+      return
+    }
+
+    try {
+      await consumePantryQuantity(
+        {
+          id: consumingAlert.pantryItemId,
+          name: consumingAlert.name,
+          quantity: consumingAlert.quantity,
+        },
+        consumedQuantity.trim(),
+      )
+      showNotice(`${consumingAlert.name} consumption recorded.`)
+      setConsumingAlert(null)
+      setConsumedQuantity('')
+      setFormError(null)
+    } catch (err) {
+      setFormError(
+        err instanceof Error
+          ? err.message
+          : 'Could not record that consumption amount.',
+      )
+    }
+  }
+
+  const requestPickup = async (item: AlertItem, type: 'donation' | 'disposal') => {
+    try {
+      const created = await flagAction({
+        type,
+        pantryItemId: item.pantryItemId,
+        name: item.name,
+        quantity: item.quantity,
+      })
+
+      if (!created) {
+        showNotice(`A ${type} request already exists for ${item.name}.`)
+        return
+      }
+
+      await reducePantryQuantity(
+        { id: item.pantryItemId, quantity: item.quantity },
+        item.quantity,
+      )
+      showNotice(
+        type === 'donation'
+          ? `${item.name} donation request created.`
+          : `${item.name} disposal request created.`,
+      )
+    } catch (err) {
+      showNotice(
+        err instanceof Error
+          ? err.message
+          : `Could not create ${type} request.`,
+      )
+    }
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
@@ -83,6 +160,12 @@ export function AlertsTab() {
           This week ({counts.thisWeek})
         </div>
       </div>
+
+      {notice && (
+        <div className="mb-4 rounded-lg border border-green-100 bg-green-50 px-4 py-3 text-sm font-semibold text-green-800">
+          {notice}
+        </div>
+      )}
 
       <div
         ref={containerRef}
@@ -118,29 +201,7 @@ export function AlertsTab() {
               {item.status !== 'expired' && (
                 <>
                   <button
-                    onClick={async () => {
-                      const amount = window.prompt(
-                        `How much ${item.name} did you consume?`,
-                        item.quantity,
-                      )
-                      if (!amount) return
-                      try {
-                        await consumePantryQuantity(
-                          {
-                            id: item.pantryItemId,
-                            name: item.name,
-                            quantity: item.quantity,
-                          },
-                          amount,
-                        )
-                      } catch (err) {
-                        showNotice(
-                          err instanceof Error
-                            ? err.message
-                            : 'Could not record that consumption amount.',
-                        )
-                      }
-                    }}
+                    onClick={() => openConsumeModal(item)}
                     className="py-2 px-1 text-xs font-bold text-green-700 border border-green-600 rounded-lg hover:bg-green-50 transition-colors text-center"
                   >
                     Consume
@@ -149,14 +210,7 @@ export function AlertsTab() {
                     item.category !== 'Vegetables' &&
                     item.category !== 'Fruits' && (
                     <button
-                      onClick={() =>
-                        flagAction({
-                          type: 'donation',
-                          pantryItemId: item.pantryItemId,
-                          name: item.name,
-                          quantity: item.quantity,
-                        })
-                      }
+                      onClick={() => requestPickup(item, 'donation')}
                       className="py-2 px-1 text-xs font-bold text-white bg-wastewise-orange rounded-lg hover:bg-orange-600 transition-colors text-center"
                     >
                       Donate
@@ -165,14 +219,7 @@ export function AlertsTab() {
                 </>
               )}
               <button
-                onClick={() =>
-                  flagAction({
-                    type: 'disposal',
-                    pantryItemId: item.pantryItemId,
-                    name: item.name,
-                    quantity: item.quantity,
-                  })
-                }
+                onClick={() => requestPickup(item, 'disposal')}
                 className="py-2 px-1 text-xs font-bold text-red-600 border border-red-500 rounded-lg hover:bg-red-50 transition-colors text-center"
               >
                 Dispose
@@ -181,11 +228,6 @@ export function AlertsTab() {
           </div>
         ))}
       </div>
-      {notice && (
-        <div className="mb-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-          {notice}
-        </div>
-      )}
       {loading && (
         <div className="py-10 text-center text-gray-500">Loading alerts...</div>
       )}
@@ -195,6 +237,49 @@ export function AlertsTab() {
         </div>
       )}
       {error && <div className="py-10 text-center text-red-600">{error}</div>}
+      {consumingAlert && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-extrabold text-gray-900">
+              Record consumption
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Available: {consumingAlert.quantity}
+            </p>
+            <input
+              autoFocus
+              value={consumedQuantity}
+              onChange={(event) => setConsumedQuantity(event.target.value)}
+              placeholder={`Amount eaten, e.g. ${consumingAlert.quantity}`}
+              className="mt-4 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-wastewise-green focus:outline-none focus:ring-2 focus:ring-wastewise-green/20"
+            />
+            {formError && (
+              <div className="mt-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+                {formError}
+              </div>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setConsumingAlert(null)
+                  setFormError(null)
+                }}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitConsumedQuantity}
+                className="rounded-lg bg-wastewise-green px-4 py-2 text-sm font-bold text-white hover:bg-green-800"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
