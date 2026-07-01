@@ -10,8 +10,8 @@ import {
 } from 'firebase/auth'
 import type { User } from 'firebase/auth'
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
-import { auth, db, googleProvider, storage } from '../firebase/firebase'
+import { auth, db, googleProvider } from '../firebase/firebase'
+import { uploadToCloudinary } from './cloudinaryService'
 
 export type UserRole = 'Household' | 'Admin' | 'NGO' | 'RecyclingFirm'
 
@@ -34,8 +34,8 @@ export interface UserData {
   contactName?: string
   designation?: string
   certificateFileName?: string
-  certificateFilePath?: string
   certificateFileUrl?: string
+  certificatePublicId?: string
   verificationDocumentStatus?: 'not_submitted' | 'submitted'
   createdAt: unknown
 }
@@ -55,8 +55,8 @@ export interface SignupProfileData {
   contactName?: string
   designation?: string
   certificateFileName?: string
-  certificateFilePath?: string
   certificateFileUrl?: string
+  certificatePublicId?: string
   verificationDocumentStatus?: 'not_submitted' | 'submitted'
 }
 
@@ -114,25 +114,22 @@ export const signUp = async (
     let uploadedCertificate: SignupProfileData = {}
 
     if (certificateFile && requiresApproval(role)) {
-      const safeName = certificateFile.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-      const filePath = `partner-certificates/${user.uid}/${Date.now()}-${safeName}`
-      const fileRef = ref(storage, filePath)
-      uploadedCertificate = {
-        certificateFileName: certificateFile.name,
-        verificationDocumentStatus: 'submitted',
-      }
-
       try {
-        await uploadBytes(fileRef, certificateFile, {
-          contentType: certificateFile.type || 'application/octet-stream',
-        })
+        const upload = await uploadToCloudinary(
+          certificateFile,
+          `wastewise_uploads/partner-certificates/${user.uid}`,
+        )
         uploadedCertificate = {
-          ...uploadedCertificate,
-          certificateFilePath: filePath,
-          certificateFileUrl: await getDownloadURL(fileRef),
+          certificateFileName: certificateFile.name,
+          certificateFileUrl: upload.secureUrl,
+          certificatePublicId: upload.publicId,
+          verificationDocumentStatus: 'submitted',
         }
       } catch (uploadError) {
-        console.warn('Certificate upload skipped:', uploadError)
+        console.error('Certificate upload failed:', uploadError)
+        throw new Error(
+          'Your certificate could not be uploaded. Check your connection and try again.',
+        )
       }
     }
 

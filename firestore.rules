@@ -89,6 +89,7 @@ service cloud.firestore {
           'certificateFileName',
           'certificateFilePath',
           'certificateFileUrl',
+          'certificatePublicId',
           'verificationDocumentStatus',
           'updatedAt'
         ]);
