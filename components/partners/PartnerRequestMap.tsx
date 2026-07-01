@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet'
 import L from 'leaflet'
-import { Calendar, MapPin, Package } from 'lucide-react'
+import { Calendar, Image as ImageIcon, MapPin, Package, Route } from 'lucide-react'
 import {
+  displayDistance,
   displayPartnerDate,
   type PartnerAction,
 } from './partnerActions'
@@ -11,6 +12,12 @@ interface PartnerRequestMapProps {
   actions: PartnerAction[]
   emptyLabel: string
   pinTone: 'donation' | 'disposal'
+  partnerLocation?: {
+    lat: number
+    lng: number
+    label?: string
+  }
+  onSelectAction?: (action: PartnerAction) => void
 }
 
 function hasCoordinates(action: PartnerAction) {
@@ -20,21 +27,27 @@ function hasCoordinates(action: PartnerAction) {
   )
 }
 
-function MapController({ actions }: { actions: PartnerAction[] }) {
+function MapController({
+  actions,
+  partnerLocation,
+}: {
+  actions: PartnerAction[]
+  partnerLocation?: PartnerRequestMapProps['partnerLocation']
+}) {
   const map = useMap()
 
   useEffect(() => {
     const locatedActions = actions.filter(hasCoordinates)
-    if (locatedActions.length === 0) return
+    const points: Array<[number, number]> = locatedActions.map((action) => [
+      action.pickupLocation!.lat!,
+      action.pickupLocation!.lng!,
+    ])
+    if (partnerLocation) points.push([partnerLocation.lat, partnerLocation.lng])
+    if (points.length === 0) return
 
-    const bounds = L.latLngBounds(
-      locatedActions.map((action) => [
-        action.pickupLocation!.lat!,
-        action.pickupLocation!.lng!,
-      ]),
-    )
+    const bounds = L.latLngBounds(points)
     map.fitBounds(bounds, { padding: [48, 48], maxZoom: 17 })
-  }, [actions, map])
+  }, [actions, map, partnerLocation])
 
   return null
 }
@@ -43,6 +56,8 @@ export function PartnerRequestMap({
   actions,
   emptyLabel,
   pinTone,
+  partnerLocation,
+  onSelectAction,
 }: PartnerRequestMapProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const locatedActions = useMemo(
@@ -59,6 +74,16 @@ export function PartnerRequestMap({
         iconAnchor: [11, 11],
       }),
     [pinTone],
+  )
+  const partnerIcon = useMemo(
+    () =>
+      L.divIcon({
+        className: 'custom-leaflet-icon',
+        html: '<div class="custom-pin partner"></div>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      }),
+    [],
   )
 
   if (locatedActions.length === 0) {
@@ -86,7 +111,27 @@ export function PartnerRequestMap({
             attribution="&copy; OpenStreetMap contributors"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          <MapController actions={locatedActions} />
+          <MapController
+            actions={locatedActions}
+            partnerLocation={partnerLocation}
+          />
+          {partnerLocation && (
+            <Marker
+              position={[partnerLocation.lat, partnerLocation.lng]}
+              icon={partnerIcon}
+            >
+              <Popup>
+                <div className="font-sans">
+                  <p className="text-sm font-extrabold text-gray-900">
+                    Your organisation pin
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {partnerLocation.label || 'Partner location'}
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          )}
           {locatedActions.map((action) => (
             <Marker
               key={`${action.householdId}-${action.id}`}
@@ -115,6 +160,9 @@ export function PartnerRequestMap({
                   <p className="mt-1 text-xs text-gray-500">
                     {displayPartnerDate(action.pickupDate)}
                   </p>
+                  <p className="mt-1 text-xs font-semibold text-gray-600">
+                    {displayDistance(action.distanceKm)}
+                  </p>
                 </div>
               </Popup>
             </Marker>
@@ -133,7 +181,10 @@ export function PartnerRequestMap({
               <button
                 key={`${action.householdId}-${action.id}-summary`}
                 type="button"
-                onClick={() => setSelectedId(action.id)}
+                onClick={() => {
+                  setSelectedId(action.id)
+                  onSelectAction?.(action)
+                }}
                 className={`w-full rounded-lg border p-3 text-left transition-colors ${
                   selected
                     ? 'border-wastewise-green bg-green-50'
@@ -141,6 +192,17 @@ export function PartnerRequestMap({
                 }`}
               >
                 <p className="font-bold text-gray-900">{action.name}</p>
+                {action.imageUrl ? (
+                  <img
+                    src={action.imageUrl}
+                    alt={action.imageName || action.name}
+                    className="mt-2 h-24 w-full rounded-md object-cover"
+                  />
+                ) : (
+                  <div className="mt-2 flex h-20 items-center justify-center rounded-md bg-gray-50 text-gray-300">
+                    <ImageIcon className="h-6 w-6" />
+                  </div>
+                )}
                 <div className="mt-2 flex flex-wrap gap-3 text-xs font-semibold text-gray-500">
                   <span className="inline-flex items-center gap-1">
                     <Package className="h-3.5 w-3.5" />
@@ -150,12 +212,21 @@ export function PartnerRequestMap({
                     <Calendar className="h-3.5 w-3.5" />
                     {displayPartnerDate(action.pickupDate)}
                   </span>
+                  <span className="inline-flex items-center gap-1">
+                    <Route className="h-3.5 w-3.5" />
+                    {displayDistance(action.distanceKm)}
+                  </span>
                 </div>
                 <p className="mt-2 text-xs text-gray-500">
                   {action.pickupLocation?.buildingNameNumber ||
                     action.pickupLocation?.label ||
                     'Exact pickup pin saved'}
                 </p>
+                {onSelectAction && (
+                  <span className="mt-3 inline-flex rounded-md bg-gray-900 px-3 py-1.5 text-xs font-bold text-white">
+                    View details
+                  </span>
+                )}
               </button>
             )
           })}

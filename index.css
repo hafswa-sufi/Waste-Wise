@@ -51,3 +51,8 @@ body {
   background-color: #FF6F00;
   --pulse-color: 255, 111, 0;
 }
+.custom-pin.partner {
+  background-color: #111827;
+  border-color: #bbf7d0;
+  --pulse-color: 17, 24, 39;
+}

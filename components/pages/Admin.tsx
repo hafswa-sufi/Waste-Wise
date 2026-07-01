@@ -74,6 +74,8 @@ interface AggregationGroup {
   requestCount: number
   totalQuantity: number
   mappedCount: number
+  centerLat?: number
+  centerLng?: number
   statuses: string[]
   nextPickupDate: string
   items: string[]
@@ -127,6 +129,38 @@ function adminErrorMessage(error: unknown, fallback: string) {
   }
 
   return fallback
+}
+
+function distanceBetweenKm(
+  from: { lat?: number; lng?: number },
+  to: { lat?: number; lng?: number },
+) {
+  if (
+    typeof from.lat !== 'number' ||
+    typeof from.lng !== 'number' ||
+    typeof to.lat !== 'number' ||
+    typeof to.lng !== 'number'
+  ) {
+    return null
+  }
+
+  const earthRadiusKm = 6371
+  const latDelta = ((to.lat - from.lat) * Math.PI) / 180
+  const lngDelta = ((to.lng - from.lng) * Math.PI) / 180
+  const fromLat = (from.lat * Math.PI) / 180
+  const toLat = (to.lat * Math.PI) / 180
+  const a =
+    Math.sin(latDelta / 2) * Math.sin(latDelta / 2) +
+    Math.cos(fromLat) *
+      Math.cos(toLat) *
+      Math.sin(lngDelta / 2) *
+      Math.sin(lngDelta / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return Number((earthRadiusKm * c).toFixed(1))
+}
+
+function formatDistance(value: number | null) {
+  return typeof value === 'number' ? `${value.toFixed(1)} km` : 'distance unknown'
 }
 
 export function Admin() {
@@ -210,7 +244,7 @@ export function Admin() {
             status: String(data.status || 'Pending'),
             name: String(data.name || 'Unnamed item'),
             quantity: String(data.quantity || ''),
-            partner: String(data.partner || 'Partner pending'),
+            partner: String(data.partner || 'Awaiting assignment'),
             partnerUserId:
               typeof data.partnerUserId === 'string'
                 ? data.partnerUserId
@@ -289,6 +323,9 @@ export function Admin() {
         pickupDates: string[]
         items: Set<string>
         actions: AdminActionReport[]
+        latTotal: number
+        lngTotal: number
+        coordinateCount: number
       }
     >()
 
@@ -323,6 +360,9 @@ export function Admin() {
           pickupDates: [] as string[],
           items: new Set<string>(),
           actions: [] as AdminActionReport[],
+          latTotal: 0,
+          lngTotal: 0,
+          coordinateCount: 0,
         }
 
       existing.households.add(item.householdId)
@@ -337,6 +377,9 @@ export function Admin() {
         typeof item.pickupLocation?.lng === 'number'
       ) {
         existing.mappedCount += 1
+        existing.latTotal += item.pickupLocation.lat
+        existing.lngTotal += item.pickupLocation.lng
+        existing.coordinateCount += 1
       }
 
       groups.set(key, existing)
@@ -351,6 +394,10 @@ export function Admin() {
         requestCount: group.requestCount,
         totalQuantity: group.totalQuantity,
         mappedCount: group.mappedCount,
+        centerLat:
+          group.coordinateCount > 0 ? group.latTotal / group.coordinateCount : undefined,
+        centerLng:
+          group.coordinateCount > 0 ? group.lngTotal / group.coordinateCount : undefined,
         statuses: Array.from(group.statuses),
         nextPickupDate: group.pickupDates.sort()[0] || 'Not scheduled',
         items: Array.from(group.items).slice(0, 4),
@@ -385,6 +432,27 @@ export function Admin() {
     }),
     [partners],
   )
+
+  const partnersForGroup = (group: AggregationGroup) =>
+    approvedPartnersByType[group.type]
+      .map((partner) => ({
+        partner,
+        distanceKm: distanceBetweenKm(
+          { lat: partner.lat, lng: partner.lng },
+          { lat: group.centerLat, lng: group.centerLng },
+        ),
+      }))
+      .sort((a, b) => {
+        const aDistance =
+          typeof a.distanceKm === 'number'
+            ? a.distanceKm
+            : Number.POSITIVE_INFINITY
+        const bDistance =
+          typeof b.distanceKm === 'number'
+            ? b.distanceKm
+            : Number.POSITIVE_INFINITY
+        return aDistance - bDistance
+      })
 
   const handleBatchAssignment = async (group: AggregationGroup) => {
     const partnerUserId = selectedBatchPartners[group.key]
@@ -737,11 +805,12 @@ export function Admin() {
                           Choose approved{' '}
                           {group.type === 'donation' ? 'NGO' : 'recycler'}
                         </option>
-                        {approvedPartnersByType[group.type].map((partner) => (
+                        {partnersForGroup(group).map(({ partner, distanceKm }) => (
                           <option key={partner.userId} value={partner.userId}>
                             {partner.organizationName ||
                               partner.name ||
-                              partner.email}
+                              partner.email}{' '}
+                            - {formatDistance(distanceKm)}
                           </option>
                         ))}
                       </select>

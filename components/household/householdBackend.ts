@@ -75,6 +75,8 @@ export interface ActionItem {
   partner: string
   pickupDate: string
   status: ActionStatus
+  imageUrl?: string | null
+  imageName?: string | null
   notificationRead?: boolean
   pickupLocation?: {
     label?: string
@@ -114,10 +116,10 @@ export interface NewActionInput {
   quantity: string
   partner?: string
   pickupDate?: string
+  imageUrl?: string | null
+  imageName?: string | null
 }
 
-const donationPartners = ['Food Banking Kenya', 'Hand in Hand Eastern Africa']
-const disposalPartners = ['Taka Taka Solutions', 'Mr. Green Africa']
 const localPantryKey = 'wastewise.household.pantryItems'
 const localActionsKey = 'wastewise.household.actions'
 
@@ -217,9 +219,19 @@ function normalizeActionItem(id: string, data: DocumentData): ActionItem {
     quantityValue:
       typeof data.quantityValue === 'number' ? data.quantityValue : undefined,
     quantityUnit: asString(data.quantityUnit) || undefined,
-    partner: asString(data.partner, 'Partner pending'),
+    partner: asString(data.partner, 'Awaiting assignment'),
     pickupDate: asString(data.pickupDate),
     status: asString(data.status, 'Pending') as ActionStatus,
+    imageUrl:
+      asString(data.imageUrl) ||
+      asString(data.photoUrl) ||
+      asString(data.foodImageUrl) ||
+      null,
+    imageName:
+      asString(data.imageName) ||
+      asString(data.photoName) ||
+      asString(data.foodImageName) ||
+      null,
     notificationRead: data.notificationRead === true,
     pickupLocation: pickupLocation
       ? {
@@ -356,11 +368,6 @@ function remainingQuantity(currentQuantity: string, consumedQuantity: string) {
   }
 }
 
-function pickPartner(type: HouseholdActionType) {
-  const partners = type === 'donation' ? donationPartners : disposalPartners
-  return partners[Math.floor(Math.random() * partners.length)]
-}
-
 function defaultPickupDate() {
   const date = new Date()
   date.setDate(date.getDate() + 2)
@@ -464,28 +471,28 @@ function sampleActions(): NewActionInput[] {
       type: 'donation',
       name: 'Rice',
       quantity: '5kg',
-      partner: 'Food Banking Kenya',
+      partner: 'Awaiting assignment',
       pickupDate: relativeDate(2),
     },
     {
       type: 'donation',
       name: 'Beans',
       quantity: '1.5kg',
-      partner: 'Hand in Hand Eastern Africa',
+      partner: 'Awaiting assignment',
       pickupDate: relativeDate(4),
     },
     {
       type: 'disposal',
       name: 'Vegetable peels',
       quantity: '2kg',
-      partner: 'Taka Taka Solutions',
+      partner: 'Awaiting assignment',
       pickupDate: relativeDate(1),
     },
     {
       type: 'disposal',
       name: 'Expired yoghurt cups',
       quantity: '4 cups',
-      partner: 'Mr. Green Africa',
+      partner: 'Awaiting assignment',
       pickupDate: relativeDate(3),
     },
   ]
@@ -733,6 +740,8 @@ export function useHouseholdBackend() {
       partner: input.partner || 'Household',
       pickupDate: input.pickupDate || toDateInputValue(new Date()),
       status,
+      imageUrl: input.imageUrl ?? null,
+      imageName: input.imageName ?? null,
       notificationRead: false,
     }
     setActions((current) => {
@@ -870,7 +879,7 @@ export function useHouseholdBackend() {
       recordLocalAction(
         {
           ...input,
-          partner: input.partner || pickPartner(input.type),
+          partner: input.partner || 'Awaiting assignment',
           pickupDate: input.pickupDate || defaultPickupDate(),
         },
         'Pending',
@@ -922,6 +931,8 @@ export function useHouseholdBackend() {
         routingDistanceKm: Number(routedPartner.distance.toFixed(2)),
         routingStatus: 'offered',
         status: 'Assigned',
+        imageUrl: input.imageUrl ?? null,
+        imageName: input.imageName ?? null,
         notificationRead: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -1064,7 +1075,7 @@ export function useHouseholdBackend() {
       pantryItemId: item.pantryItemId,
       name: item.name,
       quantity: item.quantity,
-      partner: item.partner || pickPartner(item.type),
+      partner: item.partner || 'Awaiting assignment',
       pickupDate: item.pickupDate || defaultPickupDate(),
       status: 'Pending',
       notificationRead: false,

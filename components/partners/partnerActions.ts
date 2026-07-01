@@ -39,8 +39,11 @@ export interface PartnerAction {
   batchId?: string | null
   batchArea?: string | null
   batchAssignedAt?: Timestamp
+  distanceKm?: number | null
   pickupDate: string
   status: PartnerActionStatus
+  imageUrl?: string | null
+  imageName?: string | null
   notificationRead?: boolean
   declinedPartnerIds: string[]
   pickupLocation?: {
@@ -95,13 +98,23 @@ function normalizePartnerAction(
     quantity: asString(data.quantity, '1 item'),
     partner: partnerUserId
       ? asString(data.partner, 'Assigned partner')
-      : 'Unassigned request',
+      : 'Awaiting assignment',
     partnerUserId,
     batchId: asString(data.batchId) || null,
     batchArea: asString(data.batchArea) || null,
     batchAssignedAt: data.batchAssignedAt as Timestamp | undefined,
     pickupDate: asString(data.pickupDate),
     status: asString(data.status, 'Pending') as PartnerActionStatus,
+    imageUrl:
+      asString(data.imageUrl) ||
+      asString(data.photoUrl) ||
+      asString(data.foodImageUrl) ||
+      null,
+    imageName:
+      asString(data.imageName) ||
+      asString(data.photoName) ||
+      asString(data.foodImageName) ||
+      null,
     notificationRead: data.notificationRead === true,
     declinedPartnerIds: Array.isArray(data.declinedPartnerIds)
       ? data.declinedPartnerIds.filter(
@@ -148,6 +161,38 @@ export function parseQuantityValue(value: string) {
   if (!match) return 0
   const amount = Number(match[1])
   return Number.isFinite(amount) ? amount : 0
+}
+
+function distanceBetweenKm(
+  from: { lat?: number; lng?: number },
+  to: { lat?: number; lng?: number },
+) {
+  if (
+    !isNumber(from.lat) ||
+    !isNumber(from.lng) ||
+    !isNumber(to.lat) ||
+    !isNumber(to.lng)
+  ) {
+    return null
+  }
+
+  const earthRadiusKm = 6371
+  const latDelta = ((to.lat - from.lat) * Math.PI) / 180
+  const lngDelta = ((to.lng - from.lng) * Math.PI) / 180
+  const fromLat = (from.lat * Math.PI) / 180
+  const toLat = (to.lat * Math.PI) / 180
+  const a =
+    Math.sin(latDelta / 2) * Math.sin(latDelta / 2) +
+    Math.cos(fromLat) *
+      Math.cos(toLat) *
+      Math.sin(lngDelta / 2) *
+      Math.sin(lngDelta / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return Number((earthRadiusKm * c).toFixed(1))
+}
+
+export function displayDistance(value?: number | null) {
+  return typeof value === 'number' ? `${value.toFixed(1)} km away` : 'Distance unknown'
 }
 
 function pickupArea(action: PartnerAction) {
@@ -352,10 +397,19 @@ export function usePartnerActions(type: 'donation' | 'disposal') {
     return onSnapshot(
       actionsQuery,
       (snapshot) => {
+        const partnerPin = {
+          lat: userData?.lat,
+          lng: userData?.lng,
+        }
         const nextActions = snapshot.docs
           .map((snapshotDoc) =>
             normalizePartnerAction(snapshotDoc.ref, snapshotDoc.data()),
           )
+          .map((action) => ({
+            ...action,
+            partner: action.partnerUserId ? action.partner : 'Awaiting assignment',
+            distanceKm: distanceBetweenKm(partnerPin, action.pickupLocation ?? {}),
+          }))
           .filter((action) => action.status !== 'Cancelled')
           .filter(
             (action) =>
@@ -367,6 +421,13 @@ export function usePartnerActions(type: 'donation' | 'disposal') {
           .sort((a, b) => {
             const statusDiff = statusRank(a.status) - statusRank(b.status)
             if (statusDiff !== 0) return statusDiff
+
+            const aDistance =
+              typeof a.distanceKm === 'number' ? a.distanceKm : Number.POSITIVE_INFINITY
+            const bDistance =
+              typeof b.distanceKm === 'number' ? b.distanceKm : Number.POSITIVE_INFINITY
+            const distanceDiff = aDistance - bDistance
+            if (distanceDiff !== 0) return distanceDiff
 
             const aCreated = a.createdAt?.toDate?.().getTime() ?? 0
             const bCreated = b.createdAt?.toDate?.().getTime() ?? 0
@@ -384,7 +445,7 @@ export function usePartnerActions(type: 'donation' | 'disposal') {
         setLoading(false)
       },
     )
-  }, [currentUser, type])
+  }, [currentUser, type, userData?.lat, userData?.lng])
 
   const availableActions = useMemo(
     () => actions.filter((action) => action.status === 'Assigned'),

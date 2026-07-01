@@ -15,6 +15,7 @@ import {
 import { Link, useNavigate } from 'react-router-dom'
 import {
   displayPartnerDate,
+  displayDistance,
   groupPartnerBatches,
   partnerActionErrorMessage,
   parseQuantityValue,
@@ -23,6 +24,7 @@ import {
   type PartnerActionBatch,
 } from '../partners/partnerActions'
 import { PartnerRequestMap } from '../partners/PartnerRequestMap'
+import { PartnerRequestDetails } from '../partners/PartnerRequestDetails'
 import { logout } from '../../src/service/authService'
 import { useAuth } from '../../src/context/useAuth'
 
@@ -58,6 +60,10 @@ export function Recycling() {
   const [viewMode, setViewMode] = useState<ViewMode>('available')
   const [workingId, setWorkingId] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [selectedAction, setSelectedAction] = useState<PartnerAction | null>(
+    null,
+  )
 
   const stats = useMemo(
     () => ({
@@ -97,13 +103,16 @@ export function Recycling() {
   ) => {
     setWorkingId(action.id)
     setMessage(null)
+    setActionError(null)
     try {
       await handler(action)
       setMessage(successMessage)
       if (nextView) setViewMode(nextView)
     } catch (actionError) {
       console.error('Recycling action error:', actionError)
-      setMessage(partnerActionErrorMessage(actionError, 'disposal collection'))
+      setActionError(
+        partnerActionErrorMessage(actionError, 'disposal collection'),
+      )
     } finally {
       setWorkingId(null)
     }
@@ -112,12 +121,13 @@ export function Recycling() {
   const runBatchAction = async (batch: PartnerActionBatch) => {
     setWorkingId(batch.key)
     setMessage(null)
+    setActionError(null)
     try {
       await markBatchCollected(batch)
       setMessage(`${batch.area} batch marked as collected.`)
     } catch (actionError) {
       console.error('Recycling batch action error:', actionError)
-      setMessage(
+      setActionError(
         partnerActionErrorMessage(actionError, 'disposal collection batch'),
       )
     } finally {
@@ -248,6 +258,19 @@ export function Recycling() {
             {message}
           </div>
         )}
+        {actionError && (
+          <div className="mb-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            {actionError}
+          </div>
+        )}
+
+        {(typeof userData?.lat !== 'number' ||
+          typeof userData?.lng !== 'number') && (
+          <div className="mb-4 rounded-lg border border-yellow-100 bg-yellow-50 px-4 py-3 text-sm font-semibold text-yellow-800">
+            Save your organisation pickup base in Partner Profile to sort
+            requests by distance.
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
@@ -260,6 +283,17 @@ export function Recycling() {
             actions={mapActions}
             emptyLabel="Only requests with a saved household pickup pin can appear here."
             pinTone="disposal"
+            partnerLocation={
+              typeof userData?.lat === 'number' &&
+              typeof userData?.lng === 'number'
+                ? {
+                    lat: userData.lat,
+                    lng: userData.lng,
+                    label: userData.organizationName || userData.name,
+                  }
+                : undefined
+            }
+            onSelectAction={setSelectedAction}
           />
         ) : viewMode === 'reports' ? (
           <div className="grid gap-4 md:grid-cols-3">
@@ -433,9 +467,20 @@ export function Recycling() {
                     <Truck className="h-4 w-4 text-gray-400" />
                     <span>{action.partner}</span>
                   </div>
+                  <div className="flex items-center gap-2 text-gray-600 sm:col-span-2">
+                    <MapPinned className="h-4 w-4 text-gray-400" />
+                    <span>{displayDistance(action.distanceKm)}</span>
+                  </div>
                 </div>
 
                 <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAction(action)}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-50"
+                  >
+                    View Details
+                  </button>
                   {action.status === 'Assigned' && (
                     <>
                       <button
@@ -494,6 +539,13 @@ export function Recycling() {
           </div>
         )}
       </main>
+      {selectedAction && (
+        <PartnerRequestDetails
+          action={selectedAction}
+          onClose={() => setSelectedAction(null)}
+          tone="disposal"
+        />
+      )}
     </div>
   )
 }

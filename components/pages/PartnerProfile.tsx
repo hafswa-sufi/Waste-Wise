@@ -1,10 +1,88 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
-import { ArrowLeft, Building2, Save } from 'lucide-react'
+import {
+  ArrowLeft,
+  Building2,
+  LocateFixed,
+  MapPin,
+  RefreshCw,
+  Save,
+} from 'lucide-react'
+import {
+  MapContainer,
+  Marker,
+  TileLayer,
+  useMap,
+  useMapEvents,
+} from 'react-leaflet'
+import L from 'leaflet'
 import { Link, useNavigate } from 'react-router-dom'
 import { db } from '../../src/firebase/firebase'
 import { useAuth } from '../../src/context/useAuth'
 import { authErrorMessage } from '../auth/authErrors'
+
+function PartnerPinPicker({
+  lat,
+  lng,
+  onChange,
+}: {
+  lat: number | null
+  lng: number | null
+  onChange: (next: { lat: number; lng: number }) => void
+}) {
+  const position = lat !== null && lng !== null ? [lat, lng] as [number, number] : null
+  const center: [number, number] = position ?? [-1.2921, 36.8219]
+  const icon = useMemo(
+    () =>
+      L.divIcon({
+        className: 'custom-leaflet-icon',
+        html: '<div class="custom-pin partner"></div>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      }),
+    [],
+  )
+
+  return (
+    <MapContainer
+      center={center}
+      zoom={position ? 15 : 12}
+      className="h-72 w-full rounded-lg"
+      scrollWheelZoom={false}
+    >
+      <TileLayer
+        attribution="&copy; OpenStreetMap contributors"
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+      <PartnerMapRecenter position={position} />
+      <PartnerMapClickCatcher onChange={onChange} />
+      {position && <Marker position={position} icon={icon} />}
+    </MapContainer>
+  )
+}
+
+function PartnerMapRecenter({ position }: { position: [number, number] | null }) {
+  const map = useMap()
+
+  useEffect(() => {
+    if (position) map.setView(position, 15)
+  }, [map, position])
+
+  return null
+}
+
+function PartnerMapClickCatcher({
+  onChange,
+}: {
+  onChange: (next: { lat: number; lng: number }) => void
+}) {
+  useMapEvents({
+    click(event) {
+      onChange({ lat: event.latlng.lat, lng: event.latlng.lng })
+    },
+  })
+  return null
+}
 
 export function PartnerProfile() {
   const navigate = useNavigate()
@@ -18,6 +96,12 @@ export function PartnerProfile() {
   const [operatingCounties, setOperatingCounties] = useState(
     userData?.operatingCounties ?? userData?.location ?? '',
   )
+  const [pinLat, setPinLat] = useState<number | null>(
+    typeof userData?.lat === 'number' ? userData.lat : null,
+  )
+  const [pinLng, setPinLng] = useState<number | null>(
+    typeof userData?.lng === 'number' ? userData.lng : null,
+  )
   const [contactName, setContactName] = useState(userData?.contactName ?? '')
   const [designation, setDesignation] = useState(userData?.designation ?? '')
   const [serviceBaseAddress, setServiceBaseAddress] = useState(
@@ -29,12 +113,18 @@ export function PartnerProfile() {
       : '25',
   )
   const [saving, setSaving] = useState(false)
+  const [locating, setLocating] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const dashboardPath = userData?.role === 'RecyclingFirm' ? '/recycling' : '/dashboard'
   const partnerLabel =
     userData?.role === 'RecyclingFirm' ? 'Recycling Company' : 'NGO'
+
+  useEffect(() => {
+    setPinLat(typeof userData?.lat === 'number' ? userData.lat : null)
+    setPinLng(typeof userData?.lng === 'number' ? userData.lng : null)
+  }, [userData?.lat, userData?.lng])
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -92,8 +182,8 @@ export function PartnerProfile() {
         serviceBaseAddress: serviceBaseAddress.trim(),
         contactName: contactName.trim(),
         designation: designation.trim(),
-        lat,
-        lng,
+        lat: pinLat ?? lat,
+        lng: pinLng ?? lng,
         maxPickupRadiusKm: radius,
         updatedAt: serverTimestamp(),
       })
@@ -108,6 +198,41 @@ export function PartnerProfile() {
       )
     } finally {
       setSaving(false)
+    }
+  }
+
+  const geocodeOperatingArea = async () => {
+    if (!operatingCounties.trim()) {
+      setError('Enter your operating area before locating it.')
+      return
+    }
+
+    setLocating(true)
+    setError(null)
+
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(
+          `${organizationName || partnerLabel}, ${operatingCounties}, Kenya`,
+        )}`,
+      )
+      if (!response.ok) throw new Error('Location lookup failed.')
+      const [result] = (await response.json()) as Array<{
+        lat?: string
+        lon?: string
+      }>
+      const lat = Number(result?.lat)
+      const lng = Number(result?.lon)
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        throw new Error('Could not find that area.')
+      }
+      setPinLat(lat)
+      setPinLng(lng)
+    } catch (lookupError) {
+      console.error('Partner geocode error:', lookupError)
+      setError('Could not locate that area. Click the map to set your pin.')
+    } finally {
+      setLocating(false)
     }
   }
 
@@ -187,6 +312,48 @@ export function PartnerProfile() {
                 className="mt-1.5 w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 focus:border-wastewise-green focus:outline-none focus:ring-2 focus:ring-wastewise-green/20"
               />
             </label>
+
+            <div className="md:col-span-2">
+              <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <span className="text-sm font-bold text-gray-700">
+                    Organisation pickup base pin
+                  </span>
+                  <p className="mt-1 text-xs font-semibold text-gray-500">
+                    Used to sort nearby household requests and compare routing distance.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={geocodeOperatingArea}
+                  disabled={locating}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {locating ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <LocateFixed className="h-4 w-4" />
+                  )}
+                  Locate area
+                </button>
+              </div>
+              <div className="overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                <PartnerPinPicker
+                  lat={pinLat}
+                  lng={pinLng}
+                  onChange={(next) => {
+                    setPinLat(next.lat)
+                    setPinLng(next.lng)
+                  }}
+                />
+              </div>
+              <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-gray-500">
+                <MapPin className="h-3.5 w-3.5" />
+                {pinLat !== null && pinLng !== null
+                  ? `${pinLat.toFixed(5)}, ${pinLng.toFixed(5)}`
+                  : 'No partner pin saved yet.'}
+              </p>
+            </div>
 
             <label className="block">
               <span className="text-sm font-bold text-gray-700">
