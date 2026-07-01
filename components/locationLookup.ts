@@ -31,6 +31,26 @@ export function buildHouseholdLocationQueries(
   ])
 }
 
+export function buildPartnerLocationQueries(
+  serviceBaseAddress: string,
+  operatingCounties: string,
+  organizationName = '',
+) {
+  const base = serviceBaseAddress.trim()
+  const coverage = operatingCounties.trim()
+  const organization = organizationName.trim()
+
+  return uniqueNonEmpty([
+    base && coverage ? `${base}, ${coverage}, Nairobi, Kenya` : '',
+    base && coverage ? `${base}, ${coverage}, Kenya` : '',
+    organization && base ? `${organization}, ${base}, Kenya` : '',
+    base ? `${base}, Nairobi, Kenya` : '',
+    base ? `${base}, Kenya` : '',
+    coverage ? `${coverage}, Nairobi, Kenya` : '',
+    coverage ? `${coverage}, Kenya` : '',
+  ])
+}
+
 export async function searchKenyaLocation(queries: string[]) {
   for (const query of queries) {
     const response = await fetch(

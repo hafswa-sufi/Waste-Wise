@@ -20,6 +20,10 @@ import { Link, useNavigate } from 'react-router-dom'
 import { db } from '../../src/firebase/firebase'
 import { useAuth } from '../../src/context/useAuth'
 import { authErrorMessage } from '../auth/authErrors'
+import {
+  buildPartnerLocationQueries,
+  searchKenyaLocation,
+} from '../locationLookup'
 
 function PartnerPinPicker({
   lat,
@@ -114,6 +118,7 @@ export function PartnerProfile() {
   )
   const [saving, setSaving] = useState(false)
   const [locating, setLocating] = useState(false)
+  const [usingCurrentLocation, setUsingCurrentLocation] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -139,13 +144,6 @@ export function PartnerProfile() {
     setSaving(true)
     try {
       const radius = Number(maxPickupRadiusKm)
-      const locationQuery = [
-        serviceBaseAddress.trim(),
-        operatingCounties.trim(),
-        'Kenya',
-      ]
-        .filter(Boolean)
-        .join(', ')
 
       if (!serviceBaseAddress.trim()) {
         throw new Error('Enter the service base or pickup area.')
@@ -154,22 +152,22 @@ export function PartnerProfile() {
         throw new Error('Enter a valid pickup radius in kilometres.')
       }
 
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ke&q=${encodeURIComponent(
-          locationQuery,
-        )}`,
-      )
-      const results = (await response.json()) as Array<{
-        lat?: string
-        lon?: string
-      }>
-      const result = results[0]
-      const lat = Number(result?.lat)
-      const lng = Number(result?.lon)
+      let resolvedPin =
+        pinLat !== null && pinLng !== null ? { lat: pinLat, lng: pinLng } : null
+      if (!resolvedPin) {
+        const result = await searchKenyaLocation(
+          buildPartnerLocationQueries(
+            serviceBaseAddress,
+            operatingCounties,
+            organizationName,
+          ),
+        )
+        resolvedPin = result ? { lat: result.lat, lng: result.lng } : null
+      }
 
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      if (!resolvedPin) {
         throw new Error(
-          'Could not find that service location. Try estate, road, town, and county.',
+          'Set the organisation pickup base pin before saving.',
         )
       }
 
@@ -182,8 +180,8 @@ export function PartnerProfile() {
         serviceBaseAddress: serviceBaseAddress.trim(),
         contactName: contactName.trim(),
         designation: designation.trim(),
-        lat: pinLat ?? lat,
-        lng: pinLng ?? lng,
+        lat: resolvedPin.lat,
+        lng: resolvedPin.lng,
         maxPickupRadiusKm: radius,
         updatedAt: serverTimestamp(),
       })
@@ -202,38 +200,60 @@ export function PartnerProfile() {
   }
 
   const geocodeOperatingArea = async () => {
-    if (!operatingCounties.trim()) {
-      setError('Enter your operating area before locating it.')
+    const queries = buildPartnerLocationQueries(
+      serviceBaseAddress,
+      operatingCounties,
+      organizationName,
+    )
+
+    if (queries.length === 0) {
+      setError('Enter your service base or operating area before locating it.')
       return
     }
 
     setLocating(true)
     setError(null)
+    setMessage(null)
 
     try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(
-          `${organizationName || partnerLabel}, ${operatingCounties}, Kenya`,
-        )}`,
-      )
-      if (!response.ok) throw new Error('Location lookup failed.')
-      const [result] = (await response.json()) as Array<{
-        lat?: string
-        lon?: string
-      }>
-      const lat = Number(result?.lat)
-      const lng = Number(result?.lon)
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      const result = await searchKenyaLocation(queries)
+      if (!result) {
         throw new Error('Could not find that area.')
       }
-      setPinLat(lat)
-      setPinLng(lng)
+      setPinLat(result.lat)
+      setPinLng(result.lng)
+      setMessage('Service base pinned. Save changes to use it for routing.')
     } catch (lookupError) {
       console.error('Partner geocode error:', lookupError)
       setError('Could not locate that area. Click the map to set your pin.')
     } finally {
       setLocating(false)
     }
+  }
+
+  const useCurrentLocation = () => {
+    setMessage(null)
+    setError(null)
+
+    if (!navigator.geolocation) {
+      setError('Your browser does not support current-location lookup.')
+      return
+    }
+
+    setUsingCurrentLocation(true)
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setPinLat(position.coords.latitude)
+        setPinLng(position.coords.longitude)
+        setMessage('Current location pinned. Save changes to use it for routing.')
+        setUsingCurrentLocation(false)
+      },
+      () => {
+        setError('Could not access your location. Allow location permission or click the map.')
+        setUsingCurrentLocation(false)
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    )
   }
 
   return (
@@ -323,19 +343,30 @@ export function PartnerProfile() {
                     Used to sort nearby household requests and compare routing distance.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={geocodeOperatingArea}
-                  disabled={locating}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {locating ? (
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                  ) : (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={geocodeOperatingArea}
+                    disabled={locating || usingCurrentLocation}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-bold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {locating ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <LocateFixed className="h-4 w-4" />
+                    )}
+                    {locating ? 'Finding...' : 'Find on map'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={useCurrentLocation}
+                    disabled={locating || usingCurrentLocation}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-green-100 bg-green-50 px-3 py-2 text-sm font-bold text-wastewise-green hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
                     <LocateFixed className="h-4 w-4" />
-                  )}
-                  Locate area
-                </button>
+                    {usingCurrentLocation ? 'Locating...' : 'Use my location'}
+                  </button>
+                </div>
               </div>
               <div className="overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
                 <PartnerPinPicker

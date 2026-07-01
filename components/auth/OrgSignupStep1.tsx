@@ -1,7 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, LocateFixed, MapPin, RefreshCw } from 'lucide-react'
+import {
+  MapContainer,
+  Marker,
+  TileLayer,
+  useMap,
+  useMapEvents,
+} from 'react-leaflet'
+import L from 'leaflet'
 import { authErrorMessage } from './authErrors'
+import {
+  buildPartnerLocationQueries,
+  searchKenyaLocation,
+} from '../locationLookup'
 export interface OrgSignupDraft {
   organizationName: string
   organizationType: 'NGO' | 'Recycling Company'
@@ -22,6 +34,76 @@ interface OrgSignupStep1Props {
   onLoginClick: () => void
   onGoogleSignup: (draft: Omit<OrgSignupDraft, 'password'>) => Promise<void>
 }
+
+function SignupPartnerPinPicker({
+  lat,
+  lng,
+  onChange,
+}: {
+  lat: number | null
+  lng: number | null
+  onChange: (next: { lat: number; lng: number }) => void
+}) {
+  const position: [number, number] | null =
+    lat !== null && lng !== null ? [lat, lng] : null
+  const center: [number, number] = useMemo(
+    () => position ?? [-1.2921, 36.8219],
+    [position],
+  )
+  const icon = useMemo(
+    () =>
+      L.divIcon({
+        className: 'custom-leaflet-icon',
+        html: '<div class="custom-pin partner"></div>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      }),
+    [],
+  )
+
+  return (
+    <MapContainer
+      center={center}
+      zoom={position ? 15 : 12}
+      className="h-64 w-full rounded-xl"
+      scrollWheelZoom={false}
+    >
+      <TileLayer
+        attribution="&copy; OpenStreetMap contributors"
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+      <SignupPartnerMapRecenter position={position} />
+      <SignupPartnerMapClickCatcher onChange={onChange} />
+      {position && <Marker position={position} icon={icon} />}
+    </MapContainer>
+  )
+}
+
+function SignupPartnerMapRecenter({
+  position,
+}: {
+  position: [number, number] | null
+}) {
+  const map = useMap()
+  useEffect(() => {
+    if (position) map.setView(position, 15)
+  }, [map, position])
+  return null
+}
+
+function SignupPartnerMapClickCatcher({
+  onChange,
+}: {
+  onChange: (next: { lat: number; lng: number }) => void
+}) {
+  useMapEvents({
+    click(event) {
+      onChange({ lat: event.latlng.lat, lng: event.latlng.lng })
+    },
+  })
+  return null
+}
+
 export function OrgSignupStep1({
   orgType,
   onNext,
@@ -31,40 +113,95 @@ export function OrgSignupStep1({
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
+  const [organizationName, setOrganizationName] = useState('')
+  const [operatingCounties, setOperatingCounties] = useState('')
+  const [serviceBaseAddress, setServiceBaseAddress] = useState('')
+  const [pinLat, setPinLat] = useState<number | null>(null)
+  const [pinLng, setPinLng] = useState<number | null>(null)
+  const [locating, setLocating] = useState(false)
+  const [usingCurrentLocation, setUsingCurrentLocation] = useState(false)
 
   const resolveServiceLocation = async (formData: FormData) => {
     const serviceBaseAddress = String(
       formData.get('serviceBaseAddress') || '',
     ).trim()
     const operatingCounties = String(formData.get('operatingCounties') || '').trim()
-    const query = [serviceBaseAddress, operatingCounties, 'Kenya']
-      .filter(Boolean)
-      .join(', ')
 
     if (!serviceBaseAddress) {
       throw new Error('Enter the organisation service base or area.')
     }
 
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ke&q=${encodeURIComponent(
-        query,
-      )}`,
-    )
-    const results = (await response.json()) as Array<{
-      lat?: string
-      lon?: string
-    }>
-    const result = results[0]
-    const lat = Number(result?.lat)
-    const lng = Number(result?.lon)
+    if (pinLat !== null && pinLng !== null) {
+      return { serviceBaseAddress, lat: pinLat, lng: pinLng }
+    }
 
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    const result = await searchKenyaLocation(
+      buildPartnerLocationQueries(
+        serviceBaseAddress,
+        operatingCounties,
+        String(formData.get('organizationName') || ''),
+      ),
+    )
+
+    if (!result) {
       throw new Error(
-        'Could not find that service location. Try estate, road, town, and county.',
+        'Set the organisation pickup base pin before continuing.',
       )
     }
 
-    return { serviceBaseAddress, lat, lng }
+    return { serviceBaseAddress, lat: result.lat, lng: result.lng }
+  }
+
+  const handleFindLocation = async () => {
+    const queries = buildPartnerLocationQueries(
+      serviceBaseAddress,
+      operatingCounties,
+      organizationName,
+    )
+
+    if (queries.length === 0) {
+      setError('Enter the service base or operating county before locating it.')
+      return
+    }
+
+    setError(null)
+    setLocating(true)
+    try {
+      const result = await searchKenyaLocation(queries)
+      if (!result) {
+        setError('Could not locate that area. Click the map to set your pin.')
+        return
+      }
+      setPinLat(result.lat)
+      setPinLng(result.lng)
+    } catch {
+      setError('Could not search the map right now. You can still click the map manually.')
+    } finally {
+      setLocating(false)
+    }
+  }
+
+  const handleUseCurrentLocation = () => {
+    setError(null)
+
+    if (!navigator.geolocation) {
+      setError('Your browser does not support current-location lookup.')
+      return
+    }
+
+    setUsingCurrentLocation(true)
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setPinLat(position.coords.latitude)
+        setPinLng(position.coords.longitude)
+        setUsingCurrentLocation(false)
+      },
+      () => {
+        setError('Could not access your location. Allow location permission or click the map.')
+        setUsingCurrentLocation(false)
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    )
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -183,6 +320,8 @@ export function OrgSignupStep1({
               <input
                 name="organizationName"
                 type="text"
+                value={organizationName}
+                onChange={(event) => setOrganizationName(event.target.value)}
                 required
                 className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
                 placeholder="e.g. Food Banking Kenya"
@@ -224,6 +363,8 @@ export function OrgSignupStep1({
               <input
                 name="operatingCounties"
                 type="text"
+                value={operatingCounties}
+                onChange={(event) => setOperatingCounties(event.target.value)}
                 required
                 className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
                 placeholder="e.g. Nairobi, Kiambu"
@@ -319,6 +460,8 @@ export function OrgSignupStep1({
                 <input
                   name="serviceBaseAddress"
                   type="text"
+                  value={serviceBaseAddress}
+                  onChange={(event) => setServiceBaseAddress(event.target.value)}
                   required
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-wastewise-green/20 focus:border-wastewise-green transition-all"
                   placeholder="e.g. Westlands, Nairobi or Mombasa Road, Nairobi"
@@ -339,6 +482,53 @@ export function OrgSignupStep1({
                   placeholder="25"
                 />
               </div>
+            </div>
+            <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <div className="mb-3 flex items-start gap-2 text-sm text-gray-600">
+                <MapPin className="mt-0.5 h-4 w-4 text-wastewise-green" />
+                <span>
+                  Search using the service base, use current location, or click
+                  the map to set the organisation pickup base.
+                </span>
+              </div>
+              <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={handleFindLocation}
+                  disabled={locating || usingCurrentLocation}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-green-100 bg-white px-3 py-2 text-sm font-bold text-wastewise-green hover:bg-green-50 disabled:opacity-60"
+                >
+                  {locating ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <LocateFixed className="h-4 w-4" />
+                  )}
+                  {locating ? 'Finding...' : 'Find on map'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleUseCurrentLocation}
+                  disabled={locating || usingCurrentLocation}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                >
+                  <LocateFixed className="h-4 w-4" />
+                  {usingCurrentLocation ? 'Locating...' : 'Use my location'}
+                </button>
+              </div>
+              <SignupPartnerPinPicker
+                lat={pinLat}
+                lng={pinLng}
+                onChange={(next) => {
+                  setPinLat(next.lat)
+                  setPinLng(next.lng)
+                }}
+              />
+              <p className="mt-2 flex items-center gap-2 text-xs font-semibold text-gray-500">
+                <MapPin className="h-3.5 w-3.5" />
+                {pinLat !== null && pinLng !== null
+                  ? `${pinLat.toFixed(5)}, ${pinLng.toFixed(5)}`
+                  : 'No organisation pin set yet.'}
+              </p>
             </div>
           </div>
 
