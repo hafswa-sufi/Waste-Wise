@@ -9,6 +9,7 @@ import {
   Recycle,
 } from 'lucide-react'
 import gsap from 'gsap'
+import { uploadToCloudinary } from '../../src/service/cloudinaryService'
 import {
   displayDate,
   type NewPantryItemInput,
@@ -162,10 +163,10 @@ export function PantryTab() {
   const [consumedQuantity, setConsumedQuantity] = useState('')
   const [donatingItem, setDonatingItem] = useState<PantryItem | null>(null)
   const [donateQuantity, setDonateQuantity] = useState('')
-  const [donateImageUrl, setDonateImageUrl] = useState('')
+  const [donateImageFile, setDonateImageFile] = useState<File | null>(null)
   const [disposingItem, setDisposingItem] = useState<PantryItem | null>(null)
   const [disposeQuantity, setDisposeQuantity] = useState('')
-  const [disposeImageUrl, setDisposeImageUrl] = useState('')
+  const [disposeImageFile, setDisposeImageFile] = useState<File | null>(null)
   const formRef = useRef<HTMLFormElement>(null)
   const tableBodyRef = useRef<HTMLTableSectionElement>(null)
   const {
@@ -286,6 +287,7 @@ export function PantryTab() {
     type: 'donation' | 'disposal',
     quantity = item.quantity,
     imageUrl = '',
+    imageName = '',
   ) => {
     try {
       const created = await flagAction({
@@ -294,7 +296,7 @@ export function PantryTab() {
         name: item.name,
         quantity,
         imageUrl: imageUrl.trim() || null,
-        imageName: imageUrl.trim() ? `${item.name} request image` : null,
+        imageName: imageName.trim() || (imageUrl.trim() ? `${item.name} request image` : null),
       })
       if (!created) {
         showNotice(`A ${type} request already exists for ${item.name}.`)
@@ -316,8 +318,25 @@ export function PantryTab() {
   const handleDonateClick = (item: PantryItem) => {
     setDonatingItem(item)
     setDonateQuantity('')
-    setDonateImageUrl('')
+    setDonateImageFile(null)
     setFormError(null)
+  }
+
+  const uploadRequestImage = async (
+    file: File | null,
+    type: 'donation' | 'disposal',
+  ) => {
+    if (!file) return { imageUrl: '', imageName: '' }
+
+    const upload = await uploadToCloudinary(
+      file,
+      `wastewise_uploads/household-requests/${type}`,
+    )
+
+    return {
+      imageUrl: upload.secureUrl,
+      imageName: file.name,
+    }
   }
 
   const submitDonationRequest = async () => {
@@ -327,15 +346,24 @@ export function PantryTab() {
       return
     }
 
+    let uploadedImage: { imageUrl: string; imageName: string }
+    try {
+      uploadedImage = await uploadRequestImage(donateImageFile, 'donation')
+    } catch {
+      setFormError('The food image could not be uploaded. Check your connection and try again.')
+      return
+    }
+
     await handleFlag(
       donatingItem,
       'donation',
       donateQuantity.trim(),
-      donateImageUrl.trim(),
+      uploadedImage.imageUrl,
+      uploadedImage.imageName,
     )
     setDonatingItem(null)
     setDonateQuantity('')
-    setDonateImageUrl('')
+    setDonateImageFile(null)
     setFormError(null)
   }
 
@@ -362,7 +390,7 @@ export function PantryTab() {
 
     setDisposingItem(item)
     setDisposeQuantity('')
-    setDisposeImageUrl('')
+    setDisposeImageFile(null)
     setFormError(null)
   }
 
@@ -373,15 +401,24 @@ export function PantryTab() {
       return
     }
 
+    let uploadedImage: { imageUrl: string; imageName: string }
+    try {
+      uploadedImage = await uploadRequestImage(disposeImageFile, 'disposal')
+    } catch {
+      setFormError('The disposal image could not be uploaded. Check your connection and try again.')
+      return
+    }
+
     await handleFlag(
       disposingItem,
       'disposal',
       disposeQuantity.trim(),
-      disposeImageUrl.trim(),
+      uploadedImage.imageUrl,
+      uploadedImage.imageName,
     )
     setDisposingItem(null)
     setDisposeQuantity('')
-    setDisposeImageUrl('')
+    setDisposeImageFile(null)
     setFormError(null)
   }
 
@@ -860,12 +897,22 @@ export function PantryTab() {
               placeholder={`Amount to donate, e.g. ${donatingItem.quantity}`}
               className="mt-4 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-wastewise-green focus:outline-none focus:ring-2 focus:ring-wastewise-green/20"
             />
-            <input
-              value={donateImageUrl}
-              onChange={(event) => setDonateImageUrl(event.target.value)}
-              placeholder="Image URL of the food, optional"
-              className="mt-3 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-wastewise-green focus:outline-none focus:ring-2 focus:ring-wastewise-green/20"
-            />
+            <label className="mt-3 block rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-3 text-sm font-semibold text-gray-600">
+              Upload food image, optional
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(event) =>
+                  setDonateImageFile(event.target.files?.[0] ?? null)
+                }
+                className="mt-2 block w-full text-sm text-gray-500 file:mr-3 file:rounded-md file:border-0 file:bg-wastewise-green file:px-3 file:py-2 file:text-sm file:font-bold file:text-white"
+              />
+              {donateImageFile && (
+                <span className="mt-2 block text-xs text-gray-500">
+                  Selected: {donateImageFile.name}
+                </span>
+              )}
+            </label>
             {formError && (
               <div className="mt-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
                 {formError}
@@ -909,12 +956,22 @@ export function PantryTab() {
               placeholder={`Amount to dispose, e.g. ${disposingItem.quantity}`}
               className="mt-4 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-wastewise-green focus:outline-none focus:ring-2 focus:ring-wastewise-green/20"
             />
-            <input
-              value={disposeImageUrl}
-              onChange={(event) => setDisposeImageUrl(event.target.value)}
-              placeholder="Image URL of the disposal item, optional"
-              className="mt-3 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-wastewise-green focus:outline-none focus:ring-2 focus:ring-wastewise-green/20"
-            />
+            <label className="mt-3 block rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-3 text-sm font-semibold text-gray-600">
+              Upload item image, optional
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(event) =>
+                  setDisposeImageFile(event.target.files?.[0] ?? null)
+                }
+                className="mt-2 block w-full text-sm text-gray-500 file:mr-3 file:rounded-md file:border-0 file:bg-red-600 file:px-3 file:py-2 file:text-sm file:font-bold file:text-white"
+              />
+              {disposeImageFile && (
+                <span className="mt-2 block text-xs text-gray-500">
+                  Selected: {disposeImageFile.name}
+                </span>
+              )}
+            </label>
             {formError && (
               <div className="mt-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
                 {formError}

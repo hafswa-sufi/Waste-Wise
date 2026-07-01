@@ -4,7 +4,6 @@ import {
   arrayUnion,
   collection,
   collectionGroup,
-  doc,
   getDocs,
   onSnapshot,
   query,
@@ -195,6 +194,14 @@ export function displayDistance(value?: number | null) {
   return typeof value === 'number' ? `${value.toFixed(1)} km away` : 'Distance unknown'
 }
 
+export function displayPartnerStatus(status: PartnerActionStatus) {
+  if (status === 'Assigned') return 'Awaiting response'
+  if (status === 'Confirmed') return 'Scheduled'
+  if (status === 'Collected') return 'Collected'
+  if (status === 'Cancelled') return 'Cancelled'
+  return status
+}
+
 function pickupArea(action: PartnerAction) {
   return (
     action.batchArea ||
@@ -206,6 +213,13 @@ function pickupArea(action: PartnerAction) {
 
 export function partnerActionErrorMessage(error: unknown, actionLabel: string) {
   const message = error instanceof Error ? error.message : String(error)
+  const code =
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof error.code === 'string'
+      ? error.code
+      : ''
 
   if (message.includes('Please log in again')) {
     return 'Your session has expired. Please log in again, then try the pickup update once more.'
@@ -216,10 +230,14 @@ export function partnerActionErrorMessage(error: unknown, actionLabel: string) {
   if (message.includes('No other approved nearby partner')) {
     return 'There is no other approved nearby partner to receive this request right now.'
   }
-  if (message.includes('permission-denied')) {
+  if (code === 'permission-denied' || message.includes('permission-denied')) {
     return `Your account is not allowed to update this ${actionLabel}. Make sure the organisation is approved and this request is assigned to you.`
   }
-  if (message.includes('unavailable') || message.includes('network')) {
+  if (
+    code === 'unavailable' ||
+    message.includes('unavailable') ||
+    message.includes('network')
+  ) {
     return 'The connection dropped before the update finished. Check your internet and try again.'
   }
 
@@ -465,13 +483,17 @@ export function usePartnerActions(type: 'donation' | 'disposal') {
   ) {
     if (!currentUser || !userData) return
 
-    await addDoc(collection(action.ref, 'statusHistory'), {
-      previousStatus,
-      status: nextStatus,
-      changedByUserId: currentUser.uid,
-      changedByRole: userData.role,
-      changedAt: serverTimestamp(),
-    })
+    try {
+      await addDoc(collection(action.ref, 'statusHistory'), {
+        previousStatus,
+        status: nextStatus,
+        changedByUserId: currentUser.uid,
+        changedByRole: userData.role,
+        changedAt: serverTimestamp(),
+      })
+    } catch (historyError) {
+      console.warn('Status history was not recorded:', historyError)
+    }
   }
 
   async function acceptAction(action: PartnerAction) {
@@ -513,17 +535,14 @@ export function usePartnerActions(type: 'donation' | 'disposal') {
         collectedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       })
-      firestoreBatch.set(doc(collection(action.ref, 'statusHistory')), {
-        previousStatus: action.status,
-        status: 'Collected',
-        changedByUserId: currentUser.uid,
-        changedByRole: userData.role,
-        notes: `Partner marked ${batch.area} batch as collected.`,
-        changedAt: serverTimestamp(),
-      })
     })
 
     await firestoreBatch.commit()
+    await Promise.all(
+      openItems.map((action) =>
+        writeStatusHistory(action, action.status, 'Collected'),
+      ),
+    )
   }
 
   async function declineAction(action: PartnerAction) {

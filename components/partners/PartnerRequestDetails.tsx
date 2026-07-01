@@ -10,6 +10,7 @@ import {
 import {
   displayDistance,
   displayPartnerDate,
+  displayPartnerStatus,
   type PartnerAction,
 } from './partnerActions'
 
@@ -30,7 +31,7 @@ export function PartnerRequestDetails({
       : 'bg-orange-50 text-orange-700'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/40 p-0 sm:items-center sm:justify-center sm:p-4">
+    <div className="fixed inset-0 z-[1200] flex items-end bg-black/40 p-0 sm:items-center sm:justify-center sm:p-4">
       <section className="max-h-[92vh] w-full overflow-y-auto rounded-t-xl bg-white p-5 shadow-2xl sm:max-w-2xl sm:rounded-xl">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -98,6 +99,38 @@ export function PartnerRequestDetails({
                 'No pickup location label saved'}
             </span>
           </div>
+        </div>
+
+        <div className="mt-5 rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <p className="text-xs font-bold uppercase text-gray-500">
+            Pickup progress
+          </p>
+          <div className="mt-3 grid gap-2 text-xs font-bold text-gray-600 sm:grid-cols-3">
+            {[
+              ['Assigned', 'Request assigned'],
+              ['Confirmed', 'Pickup scheduled'],
+              ['Collected', 'Collected'],
+            ].map(([status, label], index) => {
+              const order = ['Assigned', 'Confirmed', 'Collected']
+              const activeIndex = order.indexOf(action.status)
+              const active = activeIndex >= index
+              return (
+                <div
+                  key={status}
+                  className={`rounded-lg border px-3 py-2 ${
+                    active
+                      ? 'border-wastewise-green bg-green-50 text-green-800'
+                      : 'border-gray-200 bg-white text-gray-400'
+                  }`}
+                >
+                  {label}
+                </div>
+              )
+            })}
+          </div>
+          <p className="mt-3 text-sm font-semibold text-gray-700">
+            Current status: {displayPartnerStatus(action.status)}
+          </p>
         </div>
       </section>
     </div>

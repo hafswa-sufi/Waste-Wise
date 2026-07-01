@@ -15,6 +15,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   displayPartnerDate,
   displayDistance,
+  displayPartnerStatus,
   groupPartnerBatches,
   partnerActionErrorMessage,
   parseQuantityValue,
@@ -358,7 +359,7 @@ export function Dashboard() {
                       batch.status,
                     )}`}
                   >
-                    {batch.status}
+                    {displayPartnerStatus(batch.status)}
                   </span>
                 </div>
 
@@ -435,7 +436,7 @@ export function Dashboard() {
                       action.status,
                     )}`}
                   >
-                    {action.status}
+                    {displayPartnerStatus(action.status)}
                   </span>
                 </div>
 
@@ -490,14 +491,14 @@ export function Dashboard() {
                           runAction(
                             action,
                             acceptAction,
-                            `${action.name} pickup accepted. It is now visible on your map.`,
+                            `${action.name} pickup scheduled. It is now visible on your map.`,
                             'map',
                           )
                         }
                         className="inline-flex items-center justify-center gap-2 rounded-lg bg-wastewise-green px-4 py-2 text-sm font-bold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <CheckCircle2 className="h-4 w-4" />
-                        Accept Pickup
+                        Schedule Pickup
                       </button>
                     </>
                   )}
