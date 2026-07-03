@@ -8,7 +8,6 @@ import {
   Package,
   Recycle,
   RefreshCw,
-  Scale,
   Truck,
   XCircle,
 } from 'lucide-react'
@@ -29,7 +28,7 @@ import { PartnerRequestDetails } from '../partners/PartnerRequestDetails'
 import { logout } from '../../src/service/authService'
 import { useAuth } from '../../src/context/useAuth'
 
-type ViewMode = 'available' | 'assigned' | 'map' | 'reports'
+type ViewMode = 'available' | 'assigned' | 'map'
 
 function statusClass(status: PartnerAction['status']) {
   switch (status) {
@@ -292,7 +291,7 @@ export function Recycling() {
         </section>
 
         <div className="mb-4 flex rounded-lg bg-gray-100 p-1 sm:w-fit">
-          {(['available', 'assigned', 'map', 'reports'] as ViewMode[]).map((mode) => (
+          {(['available', 'assigned', 'map'] as ViewMode[]).map((mode) => (
             <button
               key={mode}
               type="button"
@@ -353,40 +352,6 @@ export function Recycling() {
             }
             onSelectAction={setSelectedAction}
           />
-        ) : viewMode === 'reports' ? (
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-2 text-gray-500">
-                <Scale className="h-5 w-5" />
-                <span className="text-sm font-bold uppercase">
-                  Assigned Quantity
-                </span>
-              </div>
-              <p className="mt-3 text-4xl font-extrabold text-gray-900">
-                {stats.quantity}
-              </p>
-            </div>
-            <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-2 text-gray-500">
-                <Truck className="h-5 w-5" />
-                <span className="text-sm font-bold uppercase">
-                  Active Collections
-                </span>
-              </div>
-              <p className="mt-3 text-4xl font-extrabold text-gray-900">
-                {stats.assigned - stats.collected}
-              </p>
-            </div>
-            <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-2 text-gray-500">
-                <CheckCircle2 className="h-5 w-5" />
-                <span className="text-sm font-bold uppercase">Completed</span>
-              </div>
-              <p className="mt-3 text-4xl font-extrabold text-gray-900">
-                {stats.collected}
-              </p>
-            </div>
-          </div>
         ) : loading ? (
           <div className="flex min-h-64 items-center justify-center rounded-lg border border-gray-200 bg-white">
             <div className="flex items-center gap-3 text-sm font-bold text-gray-500">
