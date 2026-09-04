@@ -1,73 +1,64 @@
-# React + TypeScript + Vite
+# WasteWise 🥬
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A web-based food waste tracking system built for Kenyan households.
 
-Currently, two official plugins are available:
+## The Problem
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Kenya wastes an estimated **5.2 million tonnes of food annually** at the household level — costing households roughly **KES 72 billion a year** — despite ranking 90th out of 125 countries on the Global Hunger Index. Much of this comes down to two things: households losing track of what's already in their pantry, and confusion around date labels like "best by" and "sell by" on packaged goods.
 
-## React Compiler
+Existing solutions don't fill this gap well:
+- **NoWaste** and **Kitche** rely on barcode scanning, which doesn't work for the unlabelled produce most Kenyan households buy at open markets.
+- **Msossi**, a Kenyan solution, addresses food waste at the business-to-consumer level but doesn't offer household pantry management or expiry tracking.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+WasteWise was built to address that gap directly.
 
-## Expanding the ESLint configuration
+## What It Does
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- **Pantry tracking** — households log what they have and when they bought it.
+- **Expiry alerts** — notifications before food goes to waste.
+- **Freshness estimation** — a rule-based model estimates the shelf life of produce using details like type, storage method, and purchase date (built for produce without printed expiry dates, which is most open-market produce in Kenya).
+- **Donation/disposal suggestions** — connecting surplus food to local NGOs and recycling partners.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Tech Stack
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+- **Frontend:** React.js
+- **Backend:** Firebase (authentication, database, storage)
+- Built under the **Scrum framework**
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Impact
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+WasteWise aims to reduce preventable household food waste, create pathways for surplus food redistribution to food-insecure communities, and contribute to Kenya's progress toward **SDG 12.3** (halving food waste by 2030). The system was evaluated through functional and usability testing with representative users from Kenyan residential estates and apartment complexes.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## About This Project
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+WasteWise was built as a 3rd-year Informatics and Computer Science project at Strathmore University's School of Computing and Engineering Sciences (SCES), under the supervision of Mr. Emmanuel Olang'.
+
+**Team:** Hafswa Sufi & Shifla Karani
+
+## Future Enhancements
+
+- **Mobile app** — extend the system into a mobile app for easier household use on smartphones.
+- **Improved freshness estimation** — incorporate local food storage data or machine learning to improve accuracy beyond the current rule-based approach.
+- **Route optimization** — optimize collection routes for NGO and recycling partners, enabling pickup from multiple households in a single trip, with map integration.
+- **Impact reporting** — generate reports tracking how much food was consumed vs. collected/donated by each household.
+- **End-to-end tracking** — allow households and partners to track food items from pantry to collection point.
+- **NLP-based scanning** — explore natural language processing for scanning and identifying fresh food items.
+
+## Getting Started
+
+> Setup steps below are a standard Vite + React + Firebase starting point — update with your actual environment/config details.
+
+```bash
+# Clone the repo
+git clone https://github.com/hafswa-sufi/Waste-Wise.git
+cd Waste-Wise
+
+# Install dependencies
+npm install
+
+# Add your Firebase config
+# Create a .env file with your Firebase project credentials
+
+# Run the dev server
+npm run dev
 ```
