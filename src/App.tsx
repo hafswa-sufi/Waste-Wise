@@ -10,6 +10,7 @@ import { Admin } from '../components/pages/Admin'
 import { PartnerProfile } from '../components/pages/PartnerProfile'
 import { AuthProvider } from './context/AuthContext'
 import { RequireAuth } from './components/RequireAuth'
+import { CookieConsent } from './components/CookieConsent'
 
 function App() {
   return (
@@ -75,6 +76,7 @@ function App() {
             }
           />
         </Routes>
+        <CookieConsent />
       </BrowserRouter>
     </AuthProvider>
   )
