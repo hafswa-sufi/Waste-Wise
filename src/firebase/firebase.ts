@@ -1,4 +1,5 @@
 import { getAnalytics, isSupported } from 'firebase/analytics'
+import type { Analytics } from 'firebase/analytics'
 import { initializeApp } from 'firebase/app'
 import { getAuth, GoogleAuthProvider } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
@@ -31,12 +32,18 @@ export const db = getFirestore(app)
 export const storage = getStorage(app)
 export const googleProvider = new GoogleAuthProvider()
 
-// Analytics only works in browser environments where it is supported.
-export const analyticsPromise =
-  typeof window === 'undefined'
-    ? Promise.resolve(null)
-    : isSupported()
-        .then((supported) => (supported ? getAnalytics(app) : null))
-        .catch(() => null)
+let analyticsPromise: Promise<Analytics | null> | undefined
+
+// Analytics is initialized only after the user grants analytics consent.
+export const enableAnalytics = () => {
+  if (!analyticsPromise) {
+    analyticsPromise =
+      typeof window === 'undefined'
+        ? Promise.resolve(null)
+        : isSupported().then((supported) => (supported ? getAnalytics(app) : null))
+  }
+
+  return analyticsPromise
+}
 
 export default app
