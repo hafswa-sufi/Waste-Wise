@@ -55,28 +55,13 @@ export function CookieConsent() {
     }
   }, [consent])
 
-  const openPreferences = () => {
-    setDraft(consent ?? defaultConsent)
-    setShowPreferences(true)
-  }
-
   const applyConsent = (value: CookieConsentValue) => {
     saveConsent(value)
     setConsent(value)
     setShowPreferences(false)
   }
 
-  if (consent && !showPreferences) {
-    return (
-      <button
-        type="button"
-        onClick={openPreferences}
-        className="fixed bottom-4 left-4 z-50 rounded-full border border-emerald-200 bg-white px-4 py-2 text-xs font-bold text-emerald-800 shadow-lg transition hover:bg-emerald-50"
-      >
-        Cookie settings
-      </button>
-    )
-  }
+  if (consent && !showPreferences) return null
 
   return (
     <section
@@ -104,7 +89,10 @@ export function CookieConsent() {
             </button>
             <button
               type="button"
-              onClick={openPreferences}
+              onClick={() => {
+                setDraft(consent ?? defaultConsent)
+                setShowPreferences(true)
+              }}
               className="rounded-lg border border-emerald-700 px-4 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-50"
             >
               Manage preferences
